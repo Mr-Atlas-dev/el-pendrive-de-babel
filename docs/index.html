@@ -1,0 +1,931 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>El Pendrive de Babel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=Playfair+Display:wght@500;700;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#ecdfc0;
+    --ink:#3b2a18;
+    --ink-soft:#5a4a33;
+    --maroon:#6b1f1f;
+    --gold:#a9792c;
+    --gold-light:#c9a24b;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    font-family:"EB Garamond", Georgia, "Times New Roman", serif;
+    color:var(--ink);
+    background-color:var(--paper);
+    background-image:
+      radial-gradient(ellipse at top left, rgba(255,250,230,.5), transparent 60%),
+      radial-gradient(ellipse at bottom right, rgba(100,70,30,.18), transparent 60%),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
+    height:100vh;
+    height:100svh;
+    overflow:hidden;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:1.4vh 1.4vw;
+    position:relative;
+  }
+  body::before{
+    content:"";
+    position:fixed;
+    inset:0;
+    pointer-events:none;
+    box-shadow:inset 0 0 160px rgba(40,25,10,.55);
+    z-index:5;
+  }
+
+  .frame{
+    position:relative;
+    width:97vw;
+    max-width:1760px;
+    height:97vh;
+    height:97svh;
+    max-height:1100px;
+    background:linear-gradient(180deg, rgba(255,252,240,.55), rgba(255,252,240,.25));
+    border:1px solid rgba(90,60,20,.35);
+    border-radius:6px;
+    box-shadow:0 30px 70px rgba(30,18,5,.35), 0 0 0 8px rgba(255,250,235,.25) inset;
+    z-index:2;
+    display:flex;
+    overflow:hidden;
+  }
+
+  .corner-tl,.corner-br,.corner-bl,.corner-dr{position:absolute; width:30px; height:30px; border:2px solid var(--gold); opacity:.8; z-index:3;}
+  .corner-tl{ top:10px; left:10px; border-right:none; border-bottom:none; }
+  .corner-br{ top:10px; right:10px; border-left:none; border-bottom:none; }
+  .corner-bl{ bottom:10px; left:10px; border-right:none; border-top:none; }
+  .corner-dr{ bottom:10px; right:10px; border-left:none; border-top:none; }
+
+  .lang-toggle{
+    position:absolute;
+    top:14px;
+    right:14px;
+    z-index:4;
+    background:rgba(255,253,245,.75);
+    border:1px solid var(--gold);
+    color:var(--gold);
+    font-family:"EB Garamond", serif;
+    font-style:italic;
+    font-size:.72rem;
+    letter-spacing:.06em;
+    padding:4px 14px;
+    border-radius:999px;
+    cursor:pointer;
+    transition:all .15s ease;
+  }
+  .lang-toggle:hover{ background:var(--gold); color:#fff8e8; }
+
+  .image-col{
+    flex:0 0 36%;
+    position:relative;
+    height:100%;
+    overflow:hidden;
+    border-right:1px solid rgba(90,60,20,.3);
+  }
+  .image-col img{
+    width:100%;
+    height:100%;
+    object-fit:cover;
+    object-position:58% 18%;
+    filter:sepia(.18) saturate(1.05) contrast(1.03) brightness(.97);
+    display:block;
+  }
+  .image-col::after{
+    content:"";
+    position:absolute;
+    inset:0;
+    background:linear-gradient(90deg, transparent 58%, rgba(236,223,192,.12) 75%, rgba(236,223,192,.55) 100%),
+               linear-gradient(0deg, rgba(20,12,4,.3), transparent 35%);
+    pointer-events:none;
+  }
+  .image-caption{
+    position:absolute;
+    left:14px;
+    bottom:12px;
+    z-index:2;
+    color:#f3e7c8;
+    font-style:italic;
+    font-size:.72rem;
+    letter-spacing:.04em;
+    text-shadow:0 1px 6px rgba(0,0,0,.8);
+  }
+
+  .content-col{
+    flex:1;
+    min-width:0;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    gap:clamp(6px, 1.1vh, 14px);
+    padding:clamp(20px, 3.2vh, 38px) clamp(18px, 2.6vw, 40px) clamp(18px, 3vh, 34px);
+    overflow:hidden;
+  }
+
+  .eyebrow{
+    text-align:center;
+    letter-spacing:.3em;
+    text-transform:uppercase;
+    font-size:clamp(.74rem, 1.55vh, .98rem);
+    color:var(--gold);
+  }
+  h1{
+    font-family:"Playfair Display", "Georgia", serif;
+    text-align:center;
+    font-size:clamp(2.1rem, 5.6vh, 3.9rem);
+    margin:0;
+    color:var(--maroon);
+    letter-spacing:.02em;
+    text-shadow:0 1px 0 rgba(255,255,255,.4);
+  }
+  .subtitle{
+    text-align:center;
+    font-style:italic;
+    color:var(--ink-soft);
+    font-size:clamp(.92rem, 1.9vh, 1.25rem);
+  }
+
+  .dedication{
+    text-align:center;
+    font-style:italic;
+    color:var(--ink-soft);
+    font-size:clamp(.92rem, 1.9vh, 1.25rem);
+    line-height:1.4;
+    max-width:520px;
+    margin:0 auto;
+  }
+  .dedication b{ color:var(--maroon); font-style:normal; font-weight:600;}
+
+  label{
+    display:block;
+    font-size:clamp(.92rem, 1.8vh, 1.15rem);
+    color:var(--ink-soft);
+    margin-bottom:4px;
+    font-style:italic;
+  }
+
+  .mode-toggle{
+    display:flex;
+    justify-content:center;
+    margin-bottom:2px;
+  }
+  .mode-btn{
+    font-family:"EB Garamond", serif;
+    font-style:italic;
+    font-size:clamp(.82rem, 1.5vh, 1rem);
+    color:var(--ink-soft);
+    background:rgba(255,253,245,.45);
+    border:1px solid rgba(90,60,20,.35);
+    padding:clamp(5px, .9vh, 8px) clamp(18px, 2.6vw, 28px);
+    cursor:pointer;
+    transition:all .15s ease;
+  }
+  .mode-btn:first-child{ border-radius:999px 0 0 999px; border-right:none; }
+  .mode-btn:last-child{ border-radius:0 999px 999px 0; }
+  .mode-btn.active{ background:var(--maroon); color:#f3e7c8; border-color:#4a1414; font-style:normal; }
+
+  textarea{
+    width:100%;
+    min-height:clamp(46px, 7.5vh, 76px);
+    resize:none;
+    font-family:"EB Garamond", serif;
+    font-size:clamp(1.05rem, 2.2vh, 1.4rem);
+    color:var(--ink);
+    background:rgba(255,253,245,.6);
+    border:1px solid rgba(90,60,20,.4);
+    border-radius:3px;
+    padding:clamp(8px, 1.3vh, 12px) clamp(10px, 1.6vw, 16px);
+    line-height:1.4;
+  }
+  textarea:focus{
+    outline:none;
+    border-color:var(--gold);
+    box-shadow:0 0 0 3px rgba(169,121,44,.18);
+  }
+
+  .file-box{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    flex-wrap:wrap;
+    background:rgba(255,253,245,.6);
+    border:1px dashed rgba(90,60,20,.4);
+    border-radius:3px;
+    padding:clamp(8px, 1.3vh, 14px) clamp(12px, 1.8vw, 16px);
+    min-height:clamp(46px, 7.5vh, 76px);
+  }
+  .file-choose-btn{
+    font-family:"Playfair Display", serif;
+    font-size:clamp(.8rem, 1.45vh, .95rem);
+    letter-spacing:.06em;
+    text-transform:uppercase;
+    color:#f3e7c8;
+    background:var(--gold);
+    border:1px solid #7a5a1e;
+    padding:clamp(7px, 1.1vh, 10px) clamp(16px, 2.2vw, 20px);
+    border-radius:3px;
+    cursor:pointer;
+    transition:all .15s ease;
+    white-space:nowrap;
+  }
+  .file-choose-btn:hover{ background:#8f6a24; }
+  .file-info{
+    font-size:clamp(.82rem, 1.45vh, 1rem);
+    color:var(--ink);
+    display:flex;
+    align-items:center;
+    gap:8px;
+    flex:1;
+    min-width:0;
+  }
+  .file-info .fname{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; }
+  .file-info .fsize{ color:var(--ink-soft); font-style:italic; white-space:nowrap; }
+  .file-remove{
+    background:none;
+    border:none;
+    color:var(--maroon);
+    font-size:1.2em;
+    line-height:1;
+    cursor:pointer;
+    padding:0 4px;
+  }
+  .file-error{
+    color:var(--maroon);
+    font-size:clamp(.76rem, 1.35vh, .9rem);
+    font-style:italic;
+    margin-top:5px;
+  }
+
+  .meta{
+    display:flex;
+    justify-content:space-between;
+    font-size:clamp(.82rem, 1.5vh, 1rem);
+    color:#8a7a5d;
+    margin-top:3px;
+  }
+
+  button#gen{
+    display:block;
+    margin:clamp(6px, 1.1vh, 12px) auto 0;
+    background:var(--maroon);
+    color:#f3e7c8;
+    border:1px solid #4a1414;
+    padding:clamp(9px, 1.4vh, 13px) clamp(28px, 4.2vw, 40px);
+    font-family:"Playfair Display", serif;
+    font-size:clamp(1.02rem, 2vh, 1.35rem);
+    letter-spacing:.1em;
+    text-transform:uppercase;
+    border-radius:2px;
+    cursor:pointer;
+    box-shadow:0 8px 18px rgba(80,20,20,.3);
+    transition:transform .15s ease, box-shadow .15s ease, background .15s ease;
+  }
+  button#gen:hover{ background:#7f2727; transform:translateY(-1px); box-shadow:0 10px 22px rgba(80,20,20,.4); }
+  button#gen:active{ transform:translateY(0); }
+  button#gen:disabled{ opacity:.45; cursor:not-allowed; box-shadow:none; transform:none; }
+  button#gen:disabled:hover{ background:var(--maroon); }
+
+  .progress-wrap{
+    margin-top:clamp(6px, 1.1vh, 12px);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:10px;
+    flex-wrap:wrap;
+  }
+  .progress-wrap[hidden]{ display:none; }
+  .progress-bar{
+    flex:0 1 220px;
+    height:7px;
+    background:rgba(90,60,20,.18);
+    border-radius:999px;
+    overflow:hidden;
+  }
+  .progress-fill{
+    display:block;
+    height:100%;
+    width:0%;
+    background:linear-gradient(90deg, var(--gold), var(--maroon));
+    transition:width .2s ease;
+  }
+  .progress-label{
+    font-size:clamp(.78rem, 1.4vh, .92rem);
+    color:var(--ink-soft);
+    font-style:italic;
+    white-space:nowrap;
+  }
+  .cancel-btn{
+    background:transparent;
+    border:1px solid var(--maroon);
+    color:var(--maroon);
+    font-size:clamp(.7rem, 1.25vh, .84rem);
+    letter-spacing:.05em;
+    text-transform:uppercase;
+    padding:3px 10px;
+    border-radius:2px;
+    cursor:pointer;
+  }
+  .cancel-btn:hover{ background:var(--maroon); color:#fff8e8; }
+
+  .results{
+    margin-top:clamp(6px, 1.2vh, 14px);
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:clamp(10px, 1.6vw, 18px);
+  }
+
+  .panel{
+    background:rgba(255,253,245,.55);
+    border:1px solid rgba(90,60,20,.3);
+    border-radius:4px;
+    padding:clamp(7px, 1.2vh, 13px) clamp(10px, 1.4vw, 14px);
+  }
+  .panel h3{
+    margin:0 0 clamp(4px, 1vh, 8px);
+    font-size:clamp(.9rem, 1.65vh, 1.1rem);
+    letter-spacing:.12em;
+    text-transform:uppercase;
+    color:var(--gold);
+    display:flex;
+    align-items:center;
+    gap:6px;
+  }
+  .path-box{
+    font-family:"Courier New", monospace;
+    font-size:clamp(.9rem, 1.75vh, 1.12rem);
+    color:var(--ink);
+    background:rgba(255,255,255,.35);
+    border:1px dashed rgba(90,60,20,.35);
+    border-radius:3px;
+    padding:clamp(7px, 1.2vh, 11px) clamp(10px, 1.3vw, 14px);
+    min-height:clamp(32px, 5vh, 50px);
+    max-height:clamp(32px, 9vh, 96px);
+    overflow-y:auto;
+    word-break:break-all;
+    line-height:1.4;
+  }
+  .path-box.empty{ color:#a0906f; font-style:italic; font-family:"EB Garamond", serif; }
+  .copy-btn{
+    margin-top:clamp(5px, .9vh, 9px);
+    background:transparent;
+    border:1px solid var(--gold);
+    color:var(--gold);
+    font-size:clamp(.8rem, 1.45vh, .96rem);
+    letter-spacing:.06em;
+    text-transform:uppercase;
+    padding:4px 10px;
+    border-radius:2px;
+    cursor:pointer;
+    transition:all .15s ease;
+  }
+  .copy-btn:hover{ background:var(--gold); color:#fff8e8; }
+
+  .instructions{
+    margin-top:clamp(6px, 1.2vh, 14px);
+    font-size:clamp(.88rem, 1.65vh, 1.04rem);
+    color:var(--ink-soft);
+    line-height:1.4;
+    border-top:1px solid rgba(90,60,20,.25);
+    padding-top:clamp(5px, 1vh, 10px);
+  }
+  .instructions b{ color:var(--maroon); }
+  .instructions .how-label{
+    display:block;
+    color:var(--maroon);
+    font-weight:600;
+    margin-bottom:4px;
+  }
+  .instructions ol{
+    margin:0;
+    padding-left:1.25em;
+    display:flex;
+    flex-direction:column;
+    gap:clamp(2px, .4vh, 5px);
+  }
+
+  footer{
+    text-align:center;
+    margin-top:clamp(3px, .8vh, 8px);
+    font-size:clamp(.76rem, 1.35vh, .9rem);
+    color:#9b8a68;
+    letter-spacing:.04em;
+  }
+
+  @media (max-width:760px){
+    html,body{ height:auto; overflow:auto; }
+    body{ padding:20px 14px; }
+    .frame{ flex-direction:column; height:auto; max-height:none; }
+    .image-col{ flex:0 0 220px; border-right:none; border-bottom:1px solid rgba(90,60,20,.3); }
+    .image-col::after{ background:linear-gradient(0deg, rgba(236,223,192,.55), rgba(236,223,192,.12) 25%, transparent 45%); }
+    .lang-toggle{ top:10px; }
+  }
+</style>
+</head>
+<body>
+
+  <div class="frame">
+    <span class="corner-tl"></span><span class="corner-br"></span><span class="corner-bl"></span><span class="corner-dr"></span>
+    <button class="lang-toggle" id="langToggle" type="button">FR</button>
+
+    <div class="image-col">
+      <img src="library.png" alt="Galerías hexagonales infinitas de la Biblioteca de Babel">
+      <div class="image-caption" id="imgCaption">galería hexagonal, una entre infinitas</div>
+    </div>
+
+    <div class="content-col">
+      <div class="eyebrow" id="t-eyebrow">un pendrive con todo el conocimiento del mundo</div>
+      <h1>El Pendrive de Babel</h1>
+      <p class="subtitle" id="t-subtitle">&laquo;El universo (que otros llaman la Biblioteca)...&raquo;</p>
+
+      <div class="dedication" id="t-dedication">
+        Para <b>Esteban y Lea</b> &mdash; en algun anaquel de esta biblioteca infinita,
+        entre libros de puro ruido, ya estaba escrita tambien su historia.
+      </div>
+
+      <div class="mode-toggle">
+        <button type="button" class="mode-btn active" id="modeTextBtn">Texto</button>
+        <button type="button" class="mode-btn" id="modeFileBtn">Archivo</button>
+      </div>
+
+      <div id="paneText">
+        <label for="input" id="t-label">Escribi una palabra, una frase, lo que quieras encontrar en la biblioteca:</label>
+        <textarea id="input" maxlength="3000" placeholder="por ejemplo: Esteban ama a Lea"></textarea>
+        <div class="meta"><span id="count"></span><span id="t-hint"></span></div>
+      </div>
+
+      <div id="paneFile" hidden>
+        <label id="t-fileLabel">Subi un archivo chiquito para interpretar sus bytes:</label>
+        <div class="file-box">
+          <input type="file" id="fileInput" hidden>
+          <button type="button" class="file-choose-btn" id="fileChooseBtn">Elegir archivo</button>
+          <div class="file-info" id="fileInfo"></div>
+        </div>
+        <div class="file-error" id="fileError" hidden></div>
+        <div class="meta"><span></span><span id="t-fileHint">cuanto mas pesa el archivo, mas tarda en calcular la ruta</span></div>
+      </div>
+
+      <button id="gen">Generar ruta</button>
+
+      <div class="progress-wrap" id="progressWrap" hidden>
+        <div class="progress-bar"><span class="progress-fill" id="progressFill"></span></div>
+        <div class="progress-label" id="progressLabel">Generando...</div>
+        <button type="button" class="cancel-btn" id="cancelBtn">Cancelar</button>
+      </div>
+
+      <div class="results">
+        <div class="panel">
+          <h3>&#8862; Windows</h3>
+          <div class="path-box empty" id="winPath">Escribi algo y presiona "Generar ruta"</div>
+          <button class="copy-btn" data-target="winPath">Copiar</button>
+        </div>
+        <div class="panel">
+          <h3>&#63743; macOS</h3>
+          <div class="path-box empty" id="macPath">Escribi algo y presiona "Generar ruta"</div>
+          <button class="copy-btn" data-target="macPath">Copiar</button>
+        </div>
+      </div>
+
+      <div class="instructions" id="t-instructions">
+        <span class="how-label">Como usarlo</span>
+        <ol>
+          <li>Conecta el pendrive.</li>
+          <li>En el explorador abrir la unidad llamada <b>disk</b>.</li>
+          <li>Pega la ruta de arriba despues de <b>disk\</b> (Windows) o <b>disk/</b> (Mac): ahi, entre miles de millones de carpetas de puro ruido, los espera un archivo llamado <b>file</b>.</li>
+          <li>Copialo a otra carpeta de tu computadora antes de abrirlo.</li>
+        </ol>
+      </div>
+
+      <footer id="t-footer">Biblioteca de Babel &middot; Jorge Luis Borges, 1941 - reinterpretada en silicio por Julian Atlasovich 2026</footer>
+    </div>
+  </div>
+
+<script>
+(function(){
+  var ALPHABET = ["A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z","0","1","2","3","4","5","6","7","8","9","!","&","(",")","-","_","+","[","]","^","="];
+  var NAME_LENGTH = 2n;
+  var ALPHABET_LENGTH = BigInt(ALPHABET.length);
+  var DIRECTORY_OBJECTS = ALPHABET_LENGTH ** NAME_LENGTH;
+  var MAX_FILE_BYTES = 30000;
+
+  function textToPath(text, separator){
+    var bytes = new TextEncoder().encode(text);
+    var index = 0n;
+    for (var i = 0n; i < BigInt(bytes.length); i++){
+      index += (BigInt(bytes[Number(i)]) + 1n) * (256n ** i);
+    }
+    var path = "";
+    while (index > 0n){
+      index -= 1n;
+      var handle = index % DIRECTORY_OBJECTS;
+      var segment = "";
+      for (var j = 0; j < Number(NAME_LENGTH); j++){
+        segment = ALPHABET[Number(handle % ALPHABET_LENGTH)] + segment;
+        handle /= ALPHABET_LENGTH;
+      }
+      path = separator + segment + path;
+      index /= DIRECTORY_OBJECTS;
+    }
+    return path;
+  }
+
+  function formatSize(bytes){
+    if (bytes < 1024) return bytes + " B";
+    return (bytes / 1024).toFixed(1) + " KB";
+  }
+
+  function workerMain(){
+    self.onmessage = function(e){
+      var ALPHABET = ["A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z","0","1","2","3","4","5","6","7","8","9","!","&","(",")","-","_","+","[","]","^","="];
+      var AL = BigInt(ALPHABET.length);
+      var DO = AL * AL;
+      var bytes = new Uint8Array(e.data);
+      var n = bytes.length;
+      var index = 0n;
+      for (var i = 0; i < n; i++){
+        index += (BigInt(bytes[i]) + 1n) * (256n ** BigInt(i));
+      }
+      var segments = [];
+      var estimateTotal = Math.max(1, Math.ceil(n * 8 / 11.2288));
+      var iter = 0;
+      while (index > 0n){
+        index -= 1n;
+        var handle = index % DO;
+        var seg = "";
+        for (var j = 0; j < 2; j++){
+          seg = ALPHABET[Number(handle % AL)] + seg;
+          handle /= AL;
+        }
+        segments.unshift(seg);
+        index /= DO;
+        iter++;
+        if (iter % 80 === 0){
+          self.postMessage({ type: "progress", count: segments.length, estimateTotal: estimateTotal });
+        }
+      }
+      self.postMessage({ type: "done", segments: segments });
+    };
+  }
+  var workerBlob = new Blob(["(" + workerMain.toString() + ")();"], { type: "application/javascript" });
+  var workerUrl = URL.createObjectURL(workerBlob);
+  var currentWorker = null;
+
+  var i18n = {
+    es: {
+      eyebrow: "un pendrive con todo el conocimiento del mundo",
+      subtitle: "«El universo (que otros llaman la Biblioteca)...»",
+      dedicationHtml: "Para <b>Esteban y Lea</b> &mdash; en algun anaquel de esta biblioteca infinita, entre libros de puro ruido, ya estaba escrita tambien su historia.",
+      modeTextLabel: "Texto",
+      modeFileLabel: "Archivo",
+      label: "Escribi una palabra, una frase, lo que quieras encontrar en la biblioteca:",
+      placeholder: "por ejemplo: Esteban ama a Lea",
+      limitReached: "limite de {n} caracteres alcanzado",
+      hint: "",
+      fileLabel: "Subi un archivo chiquito para interpretar sus bytes:",
+      fileChooseLabel: "Elegir archivo",
+      fileHint: "cuanto mas pesa el archivo, mas tarda en calcular la ruta",
+      fileTooBig: "Ese archivo pesa demasiado ({size}). El maximo es {max}.",
+      generatingLabel: "Generando",
+      cancelLabel: "Cancelar",
+      genBtn: "Generar ruta",
+      emptyPath: "Escribi algo y presiona \"Generar ruta\"",
+      emptyPathFile: "Subi un archivo y presiona \"Generar ruta\"",
+      copyBtn: "Copiar",
+      copiedBtn: "¡Copiado!",
+      instructionsHtml: "<span class=\"how-label\">Como usarlo</span><ol><li>Conecta el pendrive.</li><li>En el explorador abrir la unidad llamada <b>disk</b>.</li><li>Pega la ruta de arriba despues de <b>disk\\</b> (Windows) o <b>disk/</b> (Mac): ahi, entre miles de millones de carpetas de puro ruido, los espera un archivo llamado <b>file</b>.</li><li>Copialo a otra carpeta de tu computadora antes de abrirlo.</li></ol>",
+      footer: "Biblioteca de Babel · Jorge Luis Borges, 1941 - reinterpretada en silicio por Julian Atlasovich 2026",
+      caption: "galeria hexagonal, una entre infinitas",
+      toggleLabel: "FR",
+      pageTitle: "El Pendrive de Babel",
+      htmlLang: "es"
+    },
+    fr: {
+      eyebrow: "une clé usb contenant tout le savoir du monde",
+      subtitle: "«L'univers (que d'autres appellent la Bibliothèque)...»",
+      dedicationHtml: "Pour <b>Esteban et Lea</b> &mdash; quelque part sur une étagère de cette bibliothèque infinie, parmi des livres de pur bruit, leur histoire était déjà écrite.",
+      modeTextLabel: "Texte",
+      modeFileLabel: "Fichier",
+      label: "Écrivez un mot, une phrase, ce que vous voulez retrouver dans la bibliothèque :",
+      placeholder: "par exemple : Esteban aime Lea",
+      limitReached: "limite de {n} caractères atteinte",
+      hint: "",
+      fileLabel: "Téléversez un petit fichier pour interpréter ses octets :",
+      fileChooseLabel: "Choisir un fichier",
+      fileHint: "plus le fichier est lourd, plus le calcul est long",
+      fileTooBig: "Ce fichier est trop lourd ({size}). Le maximum est {max}.",
+      generatingLabel: "Génération",
+      cancelLabel: "Annuler",
+      genBtn: "Générer le chemin",
+      emptyPath: "Écrivez quelque chose et appuyez sur « Générer le chemin »",
+      emptyPathFile: "Téléversez un fichier et appuyez sur « Générer le chemin »",
+      copyBtn: "Copier",
+      copiedBtn: "Copié !",
+      instructionsHtml: "<span class=\"how-label\">Comment l'utiliser</span><ol><li>Branchez la clé USB.</li><li>Dans l'explorateur, ouvrez le disque nommé <b>disk</b>.</li><li>Collez le chemin ci-dessus après <b>disk\\</b> (Windows) ou <b>disk/</b> (Mac) : là, parmi des milliards de dossiers de pur bruit, un fichier nommé <b>file</b> vous attend.</li><li>Copiez-le dans un autre dossier de votre ordinateur avant de l'ouvrir.</li></ol>",
+      footer: "La Bibliothèque de Babel · Jorge Luis Borges, 1941 - réinterprétée en silicium par Julian Atlasovich 2026",
+      caption: "galerie hexagonale, une parmi l'infini",
+      toggleLabel: "ES",
+      pageTitle: "La Clé USB de Babel",
+      htmlLang: "fr"
+    }
+  };
+
+  var currentLang = "es";
+  var currentMode = "text";
+  var generating = false;
+  var lastWin = null;
+  var lastMac = null;
+  var fileState = { file: null, bytes: null, error: null };
+
+  var els = {
+    eyebrow: document.getElementById("t-eyebrow"),
+    subtitle: document.getElementById("t-subtitle"),
+    dedication: document.getElementById("t-dedication"),
+    label: document.getElementById("t-label"),
+    hint: document.getElementById("t-hint"),
+    instructions: document.getElementById("t-instructions"),
+    footer: document.getElementById("t-footer"),
+    caption: document.getElementById("imgCaption"),
+    toggle: document.getElementById("langToggle"),
+    input: document.getElementById("input"),
+    count: document.getElementById("count"),
+    winPath: document.getElementById("winPath"),
+    macPath: document.getElementById("macPath"),
+    gen: document.getElementById("gen"),
+    modeTextBtn: document.getElementById("modeTextBtn"),
+    modeFileBtn: document.getElementById("modeFileBtn"),
+    paneText: document.getElementById("paneText"),
+    paneFile: document.getElementById("paneFile"),
+    fileLabel: document.getElementById("t-fileLabel"),
+    fileHint: document.getElementById("t-fileHint"),
+    fileChooseBtn: document.getElementById("fileChooseBtn"),
+    fileInput: document.getElementById("fileInput"),
+    fileInfo: document.getElementById("fileInfo"),
+    fileError: document.getElementById("fileError"),
+    progressWrap: document.getElementById("progressWrap"),
+    progressFill: document.getElementById("progressFill"),
+    progressLabel: document.getElementById("progressLabel"),
+    cancelBtn: document.getElementById("cancelBtn")
+  };
+
+  function renderPaths(){
+    var t = i18n[currentLang];
+    var placeholder = currentMode === "file" ? t.emptyPathFile : t.emptyPath;
+    if (lastWin === null){
+      els.winPath.textContent = placeholder;
+      els.winPath.classList.add("empty");
+    } else {
+      els.winPath.textContent = "disk" + lastWin;
+      els.winPath.classList.remove("empty");
+    }
+    if (lastMac === null){
+      els.macPath.textContent = placeholder;
+      els.macPath.classList.add("empty");
+    } else {
+      els.macPath.textContent = "disk" + lastMac;
+      els.macPath.classList.remove("empty");
+    }
+  }
+
+  function updateCount(){
+    var t = i18n[currentLang];
+    var max = els.input.maxLength;
+    if (els.input.value.length >= max){
+      els.count.textContent = t.limitReached.replace("{n}", max);
+    } else {
+      els.count.textContent = "";
+    }
+  }
+
+  function renderFileInfo(){
+    var t = i18n[currentLang];
+    els.fileInfo.innerHTML = "";
+    if (fileState.file){
+      var nameSpan = document.createElement("span");
+      nameSpan.className = "fname";
+      nameSpan.textContent = fileState.file.name;
+      var sizeSpan = document.createElement("span");
+      sizeSpan.className = "fsize";
+      sizeSpan.textContent = formatSize(fileState.file.size);
+      var removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "file-remove";
+      removeBtn.textContent = "×";
+      removeBtn.addEventListener("click", clearFile);
+      els.fileInfo.appendChild(nameSpan);
+      els.fileInfo.appendChild(sizeSpan);
+      els.fileInfo.appendChild(removeBtn);
+    }
+    if (fileState.error){
+      els.fileError.textContent = fileState.error;
+      els.fileError.hidden = false;
+    } else {
+      els.fileError.hidden = true;
+    }
+  }
+
+  function updateGenEnabled(){
+    if (generating){
+      els.gen.disabled = true;
+      return;
+    }
+    if (currentMode === "file"){
+      els.gen.disabled = !fileState.bytes || !!fileState.error;
+    } else {
+      els.gen.disabled = false;
+    }
+  }
+
+  function setMode(mode){
+    currentMode = mode;
+    els.modeTextBtn.classList.toggle("active", mode === "text");
+    els.modeFileBtn.classList.toggle("active", mode === "file");
+    els.paneText.hidden = mode !== "text";
+    els.paneFile.hidden = mode !== "file";
+    lastWin = null;
+    lastMac = null;
+    hideProgress();
+    renderPaths();
+    updateGenEnabled();
+  }
+
+  function clearFile(){
+    fileState = { file: null, bytes: null, error: null };
+    els.fileInput.value = "";
+    renderFileInfo();
+    updateGenEnabled();
+  }
+
+  function handleFileSelected(f){
+    if (!f){ clearFile(); return; }
+    var t = i18n[currentLang];
+    if (f.size > MAX_FILE_BYTES){
+      fileState.file = f;
+      fileState.bytes = null;
+      fileState.error = t.fileTooBig.replace("{size}", formatSize(f.size)).replace("{max}", formatSize(MAX_FILE_BYTES));
+      renderFileInfo();
+      updateGenEnabled();
+      return;
+    }
+    var reader = new FileReader();
+    reader.onload = function(){
+      fileState.file = f;
+      fileState.bytes = new Uint8Array(reader.result);
+      fileState.error = null;
+      renderFileInfo();
+      updateGenEnabled();
+    };
+    reader.readAsArrayBuffer(f);
+  }
+
+  function showProgress(){
+    els.progressWrap.hidden = false;
+    els.progressFill.style.width = "0%";
+  }
+  function hideProgress(){
+    els.progressWrap.hidden = true;
+  }
+  function updateProgress(pct){
+    els.progressFill.style.width = pct + "%";
+    var t = i18n[currentLang];
+    els.progressLabel.textContent = t.generatingLabel + "… " + pct + "%";
+  }
+
+  function finishGeneration(){
+    generating = false;
+    currentWorker = null;
+    hideProgress();
+    updateGenEnabled();
+  }
+
+  function startFileGeneration(){
+    if (!fileState.bytes || fileState.error) return;
+    generating = true;
+    updateGenEnabled();
+    showProgress();
+    updateProgress(0);
+    var worker = new Worker(workerUrl);
+    currentWorker = worker;
+    worker.onmessage = function(e){
+      var msg = e.data;
+      if (msg.type === "progress"){
+        var pct = Math.min(99, Math.round(100 * msg.count / msg.estimateTotal));
+        updateProgress(pct);
+      } else if (msg.type === "done"){
+        var segments = msg.segments;
+        lastWin = segments.length ? ("\\" + segments.join("\\")) : "";
+        lastMac = segments.length ? ("/" + segments.join("/")) : "";
+        worker.terminate();
+        updateProgress(100);
+        renderPaths();
+        setTimeout(finishGeneration, 300);
+      }
+    };
+    worker.onerror = function(){
+      worker.terminate();
+      finishGeneration();
+    };
+    worker.postMessage(fileState.bytes.buffer.slice(0));
+  }
+
+  function applyLanguage(lang){
+    currentLang = lang;
+    var t = i18n[lang];
+    document.documentElement.lang = t.htmlLang;
+    document.title = t.pageTitle;
+    els.eyebrow.textContent = t.eyebrow;
+    els.subtitle.textContent = t.subtitle;
+    els.dedication.innerHTML = t.dedicationHtml;
+    els.modeTextBtn.textContent = t.modeTextLabel;
+    els.modeFileBtn.textContent = t.modeFileLabel;
+    els.label.textContent = t.label;
+    els.input.placeholder = t.placeholder;
+    els.hint.textContent = t.hint;
+    els.fileLabel.textContent = t.fileLabel;
+    els.fileChooseBtn.textContent = t.fileChooseLabel;
+    els.fileHint.textContent = t.fileHint;
+    els.cancelBtn.textContent = t.cancelLabel;
+    els.gen.textContent = t.genBtn;
+    els.instructions.innerHTML = t.instructionsHtml;
+    els.footer.textContent = t.footer;
+    els.caption.textContent = t.caption;
+    els.toggle.textContent = t.toggleLabel;
+    document.querySelectorAll(".copy-btn").forEach(function(btn){
+      btn.textContent = t.copyBtn;
+    });
+    if (fileState.error && fileState.file){
+      fileState.error = t.fileTooBig.replace("{size}", formatSize(fileState.file.size)).replace("{max}", formatSize(MAX_FILE_BYTES));
+    }
+    renderFileInfo();
+    updateCount();
+    renderPaths();
+  }
+
+  els.input.addEventListener("input", updateCount);
+
+  function generate(){
+    if (generating) return;
+    if (currentMode === "text"){
+      var text = els.input.value;
+      if (!text.trim()){
+        lastWin = null;
+        lastMac = null;
+      } else {
+        lastWin = textToPath(text, "\\");
+        lastMac = textToPath(text, "/");
+      }
+      renderPaths();
+    } else {
+      startFileGeneration();
+    }
+  }
+
+  els.gen.addEventListener("click", generate);
+  els.input.addEventListener("keydown", function(e){
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) generate();
+  });
+
+  els.modeTextBtn.addEventListener("click", function(){ setMode("text"); });
+  els.modeFileBtn.addEventListener("click", function(){ setMode("file"); });
+
+  els.fileChooseBtn.addEventListener("click", function(){ els.fileInput.click(); });
+  els.fileInput.addEventListener("change", function(){
+    handleFileSelected(els.fileInput.files[0]);
+  });
+
+  els.cancelBtn.addEventListener("click", function(){
+    if (currentWorker){
+      currentWorker.terminate();
+      currentWorker = null;
+    }
+    finishGeneration();
+  });
+
+  els.toggle.addEventListener("click", function(){
+    applyLanguage(currentLang === "es" ? "fr" : "es");
+  });
+
+  document.querySelectorAll(".copy-btn").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      var target = document.getElementById(btn.dataset.target);
+      navigator.clipboard.writeText(target.textContent).then(function(){
+        var t = i18n[currentLang];
+        btn.textContent = t.copiedBtn;
+        setTimeout(function(){ btn.textContent = t.copyBtn; }, 1400);
+      });
+    });
+  });
+
+  applyLanguage("es");
+})();
+</script>
+</body>
+</html>

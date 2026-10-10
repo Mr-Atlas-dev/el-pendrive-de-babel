@@ -1,10 +1,9 @@
 ## About
 
-This project turns an ESP32-S3 development board into an infinite filesystem inspired by the [digital Library of Babel](https://libraryofbabel.info/).
-
+This project turns an ESP32-S3 development board into an infinite filesystem. This is a present for Esteban and Lea
 ## Usage
 
-1. Buy an ESP32-S3 development board - ideally one shaped as a USB stick for maximum bewilderment. [This is the one I got](https://a.aliexpress.com/_EvdHrrY), though you don't necessarily need this exact variant. **That said, make sure you're getting an ESP32-S3.** That's the only one I've tested. Others may not have hardware USB support. S2 might work, but I make no promises.
+1. Use ESP32-S3 development board - ideally one shaped as a USB stick for maximum bewilderment. [This is the one I got](https://a.aliexpress.com/_EvdHrrY)
 2. Get Visual Studio Code and set up PlatformIO. Refer to Google or YouTube if you don't know how.
 3. Clone this repository **with submodules**. Again, if you don't know what that means, look it up.
 4. Open the cloned folder in VScode, wait for it to set up the project.

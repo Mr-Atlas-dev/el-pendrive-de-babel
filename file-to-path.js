@@ -2,21 +2,20 @@ const process = require("process");
 const Bun = require("bun");
 
 const BABEL_MAX_NAME_LENGTH = 2n;
-const BABEL_ALPHABET_LENGTH = 70n;
-const BABEL_DIRECTORY_OBJECTS = BABEL_ALPHABET_LENGTH ** BABEL_MAX_NAME_LENGTH;
 
+// Explorer's MTP namespace resolves folder names case-insensitively and trims trailing spaces.
 const alphabet = [
   'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H',
   'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P',
   'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X',
-  'Y', 'Z', 'a', 'b', 'c', 'd', 'e', 'f',
-  'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n',
-  'o', 'p', 'q', 'r', 's', 't', 'u', 'v',
-  'w', 'x', 'y', 'z', '0', '1', '2', '3',
-  '4', '5', '6', '7', '8', '9', '!', ' ',
+  'Y', 'Z', '0', '1', '2', '3',
+  '4', '5', '6', '7', '8', '9', '!',
   '&', '(', ')', '-', '_', '+', '[', ']',
   '^', '='
 ];
+
+const BABEL_ALPHABET_LENGTH = BigInt(alphabet.length);
+const BABEL_DIRECTORY_OBJECTS = BABEL_ALPHABET_LENGTH ** BABEL_MAX_NAME_LENGTH;
 
 const filePath = process.argv[2];
 if (!filePath) {
@@ -47,7 +46,7 @@ while (index) {
     path = alphabet[handle % BABEL_ALPHABET_LENGTH] + path;
     handle /= BABEL_ALPHABET_LENGTH;
   }
-  path = "/" + path;
+  path = "\\" + path; // path = '/' + path for Mac computers
   index /= BABEL_DIRECTORY_OBJECTS;
 }
 
