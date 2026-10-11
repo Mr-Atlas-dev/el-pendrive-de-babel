@@ -22,37 +22,25 @@ const CARACTER_COUNT = 20; // how many numbered folders per real (post-decorativ
 // BABEL_CARACTER_COUNT comment in src/monolith/usb_mtp_impl.c.h for why)
 
 // Separate, much smaller alphabet for the file CONTENT itself - letters (both cases preserved),
-// space, and basic punctuation, no digits or arbitrary bytes. Keeps paths meaningfully shorter
-// per character than encoding raw UTF-8 bytes would. Accented letters are folded to their
-// same-case base letter rather than dropped. MUST stay in lockstep with docs/index.html and the
-// firmware's babel_content_alphabet (src/monolith/usb_mtp_impl.c.h).
+// digits, space, basic punctuation, and the accented Spanish/French letters needed to write real
+// words in either language. Keeps paths meaningfully shorter per character than encoding raw
+// UTF-8 bytes would, at the cost of only supporting plain text (characters outside this set are
+// simply dropped). MUST stay in lockstep with docs/index.html and the firmware's
+// babel_content_alphabet (src/monolith/usb_mtp_impl.c.h).
 const CONTENT_ALPHABET = [" ",
   "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z",
   "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z",
-  ".", ",", "!", "?", "'", "-"];
+  "0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
+  ".", ",", "!", "?", "'", "-",
+  "Á", "À", "Â", "Ä", "Ã", "É", "È", "Ê", "Ë", "Í", "Ì", "Î", "Ï", "Ó", "Ò", "Ô", "Ö", "Õ", "Ú", "Ù", "Û", "Ü", "Ñ", "Ç",
+  "á", "à", "â", "ä", "ã", "é", "è", "ê", "ë", "í", "ì", "î", "ï", "ó", "ò", "ô", "ö", "õ", "ú", "ù", "û", "ü", "ñ", "ç"];
 const CONTENT_INDEX = {};
 CONTENT_ALPHABET.forEach((ch, i) => { CONTENT_INDEX[ch] = i; });
-
-const ACCENT_FOLD = {
-  "Á": "A", "À": "A", "Â": "A", "Ä": "A", "Ã": "A",
-  "É": "E", "È": "E", "Ê": "E", "Ë": "E",
-  "Í": "I", "Ì": "I", "Î": "I", "Ï": "I",
-  "Ó": "O", "Ò": "O", "Ô": "O", "Ö": "O", "Õ": "O",
-  "Ú": "U", "Ù": "U", "Û": "U", "Ü": "U",
-  "Ñ": "N", "Ç": "C",
-  "á": "a", "à": "a", "â": "a", "ä": "a", "ã": "a",
-  "é": "e", "è": "e", "ê": "e", "ë": "e",
-  "í": "i", "ì": "i", "î": "i", "ï": "i",
-  "ó": "o", "ò": "o", "ô": "o", "ö": "o", "õ": "o",
-  "ú": "u", "ù": "u", "û": "u", "ü": "u",
-  "ñ": "n", "ç": "c"
-};
 
 function sanitizeContentText(text) {
   let out = "";
   for (const rawCh of text) {
-    const ch = ACCENT_FOLD[rawCh] || rawCh;
-    if (CONTENT_INDEX.hasOwnProperty(ch)) out += ch;
+    if (CONTENT_INDEX.hasOwnProperty(rawCh)) out += rawCh;
   }
   return out;
 }
@@ -92,14 +80,24 @@ for (let i = 0n; i < BigInt(sanitized.length); i++) {
   index += (charIndex + 1n) * (contentRadix ** i);
 }
 
-// Path is built root-to-leaf (appended, not prepended): the decorative intro first (random,
-// cosmetic-only numbers), then one uniform-radix digit per subsequent folder - matching exactly
-// how the firmware tells decorative-vs-real levels apart purely by "how many folders deep am I".
-let path = "";
-for (const level of DECORATIVE_LEVELS) {
-  const pick = Math.floor(Math.random() * level.count) + 1;
-  path += "\\" + level.name + "-" + padNumber(pick, digitWidth(level.count)); // "/" for Mac
+// Deterministic (NOT random) pick for a decorative level: purely cosmetic since the firmware
+// ignores these entirely, but deterministic means the SAME message always generates the exact
+// SAME full path, including the decorative intro. Deliberately simple: just the character code
+// of one character of the message (cycling through it per level), modulo the level's count.
+function decorativePick(sanitizedText, levelIndex, count) {
+  if (sanitizedText.length === 0) return 1;
+  const charCode = sanitizedText.charCodeAt(levelIndex % sanitizedText.length);
+  return (charCode % count) + 1;
 }
+
+// Path is built root-to-leaf (appended, not prepended): the decorative intro first, then one
+// uniform-radix digit per subsequent folder - matching exactly how the firmware tells
+// decorative-vs-real levels apart purely by "how many folders deep am I".
+let path = "";
+DECORATIVE_LEVELS.forEach((level, d) => {
+  const pick = decorativePick(sanitized, d, level.count);
+  path += "\\" + level.name + "-" + padNumber(pick, digitWidth(level.count)); // "/" for Mac
+});
 
 const caracterRadix = BigInt(CARACTER_COUNT);
 const caracterWidth = digitWidth(CARACTER_COUNT);

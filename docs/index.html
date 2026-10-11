@@ -394,39 +394,25 @@
   // BABEL_CARACTER_COUNT comment in src/monolith/usb_mtp_impl.c.h for why)
 
   // Separate, much smaller alphabet for the file CONTENT itself - letters (both cases
-  // preserved), space, and basic punctuation, no digits or arbitrary bytes. This keeps paths
-  // meaningfully shorter per character than encoding raw UTF-8 bytes would, at the cost of only
-  // supporting plain text. Accented letters are folded to their same-case base letter (see
-  // ACCENT_FOLD below) rather than dropped outright. MUST stay in lockstep with file-to-path.js
-  // and the firmware's babel_content_alphabet (src/monolith/usb_mtp_impl.c.h).
+  // preserved), digits, space, basic punctuation, and the accented Spanish/French letters needed
+  // to write real words in either language. This keeps paths meaningfully shorter per character
+  // than encoding raw UTF-8 bytes would, at the cost of only supporting plain text (characters
+  // outside this set are simply dropped). MUST stay in lockstep with file-to-path.js and the
+  // firmware's babel_content_alphabet (src/monolith/usb_mtp_impl.c.h).
   var CONTENT_ALPHABET = [" ",
     "A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z",
     "a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z",
-    ".",",","!","?","'","-"];
+    "0","1","2","3","4","5","6","7","8","9",
+    ".",",","!","?","'","-",
+    "Á","À","Â","Ä","Ã","É","È","Ê","Ë","Í","Ì","Î","Ï","Ó","Ò","Ô","Ö","Õ","Ú","Ù","Û","Ü","Ñ","Ç",
+    "á","à","â","ä","ã","é","è","ê","ë","í","ì","î","ï","ó","ò","ô","ö","õ","ú","ù","û","ü","ñ","ç"];
   var CONTENT_INDEX = {};
   CONTENT_ALPHABET.forEach(function(ch, i){ CONTENT_INDEX[ch] = i; });
-
-  // Common Spanish/French accented letters folded to their same-case plain ASCII base letter.
-  var ACCENT_FOLD = {
-    "Á":"A", "À":"A", "Â":"A", "Ä":"A", "Ã":"A",
-    "É":"E", "È":"E", "Ê":"E", "Ë":"E",
-    "Í":"I", "Ì":"I", "Î":"I", "Ï":"I",
-    "Ó":"O", "Ò":"O", "Ô":"O", "Ö":"O", "Õ":"O",
-    "Ú":"U", "Ù":"U", "Û":"U", "Ü":"U",
-    "Ñ":"N", "Ç":"C",
-    "á":"a", "à":"a", "â":"a", "ä":"a", "ã":"a",
-    "é":"e", "è":"e", "ê":"e", "ë":"e",
-    "í":"i", "ì":"i", "î":"i", "ï":"i",
-    "ó":"o", "ò":"o", "ô":"o", "ö":"o", "õ":"o",
-    "ú":"u", "ù":"u", "û":"u", "ü":"u",
-    "ñ":"n", "ç":"c"
-  };
 
   function sanitizeContentText(text){
     var out = "";
     for (var i = 0; i < text.length; i++){
       var ch = text[i];
-      if (ACCENT_FOLD.hasOwnProperty(ch)) ch = ACCENT_FOLD[ch];
       if (CONTENT_INDEX.hasOwnProperty(ch)) out += ch;
     }
     return out;
@@ -447,6 +433,18 @@
     return s;
   }
 
+  // Deterministic (NOT random) pick for a decorative level: purely cosmetic since the firmware
+  // ignores these entirely, but deterministic means regenerating the path for the SAME message
+  // always gives the SAME full path, including the decorative intro - simpler to reason about
+  // and test than a value that changes every time you click "Generar ruta". Deliberately simple:
+  // just the character code of one character of the message (cycling through it per level),
+  // modulo the level's count.
+  function decorativePick(sanitized, levelIndex, count){
+    if (sanitized.length === 0) return 1;
+    var charCode = sanitized.charCodeAt(levelIndex % sanitized.length);
+    return (charCode % count) + 1;
+  }
+
   // Path is built root-to-leaf (appended, not prepended): the fixed decorative intro first,
   // then one uniform-radix digit per subsequent folder, in the order the firmware naturally
   // visits folders in (needing nothing but "how deep am I" to know whether it's still in the
@@ -462,7 +460,7 @@
     var path = "";
     for (var d = 0; d < DECORATIVE_LEVELS.length; d++){
       var level = DECORATIVE_LEVELS[d];
-      var pick = Math.floor(Math.random() * level.count) + 1; // cosmetic only, any value works
+      var pick = decorativePick(sanitized, d, level.count); // cosmetic only, any value works
       path = path + separator + level.name + "-" + padNumber(pick, digitWidth(level.count));
     }
     var caracterRadix = BigInt(CARACTER_COUNT);
@@ -484,7 +482,7 @@
       label: "Escribi una palabra, una frase, lo que quieras encontrar en la biblioteca:",
       placeholder: "por ejemplo: Esteban ama a Lea",
       limitReached: "limite de {n} caracteres alcanzado",
-      hint: "Solo letras, espacios y puntuacion basica (. , ! ? ' -); los acentos se simplifican automaticamente.",
+      hint: "Letras (con acentos y ñ), numeros, espacios y puntuacion basica (. , ! ? ' -).",
       genBtn: "Generar ruta",
       emptyPath: "Escribi algo y presiona \"Generar ruta\"",
       copyBtn: "Copiar",
@@ -503,7 +501,7 @@
       label: "Écrivez un mot, une phrase, ce que vous voulez retrouver dans la bibliothèque :",
       placeholder: "par exemple : Esteban aime Lea",
       limitReached: "limite de {n} caractères atteinte",
-      hint: "Uniquement des lettres, des espaces et une ponctuation simple (. , ! ? ' -) ; les accents sont automatiquement simplifiés.",
+      hint: "Lettres (avec accents), chiffres, espaces et une ponctuation simple (. , ! ? ' -).",
       genBtn: "Générer le chemin",
       emptyPath: "Écrivez quelque chose et appuyez sur « Générer le chemin »",
       copyBtn: "Copier",
