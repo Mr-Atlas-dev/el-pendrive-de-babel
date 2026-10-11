@@ -175,26 +175,6 @@
     font-style:italic;
   }
 
-  .mode-toggle{
-    display:flex;
-    justify-content:center;
-    margin-bottom:2px;
-  }
-  .mode-btn{
-    font-family:"EB Garamond", serif;
-    font-style:italic;
-    font-size:clamp(.82rem, 1.5vh, 1rem);
-    color:var(--ink-soft);
-    background:rgba(255,253,245,.45);
-    border:1px solid rgba(90,60,20,.35);
-    padding:clamp(5px, .9vh, 8px) clamp(18px, 2.6vw, 28px);
-    cursor:pointer;
-    transition:all .15s ease;
-  }
-  .mode-btn:first-child{ border-radius:999px 0 0 999px; border-right:none; }
-  .mode-btn:last-child{ border-radius:0 999px 999px 0; }
-  .mode-btn.active{ background:var(--maroon); color:#f3e7c8; border-color:#4a1414; font-style:normal; }
-
   textarea{
     width:100%;
     min-height:clamp(46px, 7.5vh, 76px);
@@ -212,59 +192,6 @@
     outline:none;
     border-color:var(--gold);
     box-shadow:0 0 0 3px rgba(169,121,44,.18);
-  }
-
-  .file-box{
-    display:flex;
-    align-items:center;
-    gap:12px;
-    flex-wrap:wrap;
-    background:rgba(255,253,245,.6);
-    border:1px dashed rgba(90,60,20,.4);
-    border-radius:3px;
-    padding:clamp(8px, 1.3vh, 14px) clamp(12px, 1.8vw, 16px);
-    min-height:clamp(46px, 7.5vh, 76px);
-  }
-  .file-choose-btn{
-    font-family:"Playfair Display", serif;
-    font-size:clamp(.8rem, 1.45vh, .95rem);
-    letter-spacing:.06em;
-    text-transform:uppercase;
-    color:#f3e7c8;
-    background:var(--gold);
-    border:1px solid #7a5a1e;
-    padding:clamp(7px, 1.1vh, 10px) clamp(16px, 2.2vw, 20px);
-    border-radius:3px;
-    cursor:pointer;
-    transition:all .15s ease;
-    white-space:nowrap;
-  }
-  .file-choose-btn:hover{ background:#8f6a24; }
-  .file-info{
-    font-size:clamp(.82rem, 1.45vh, 1rem);
-    color:var(--ink);
-    display:flex;
-    align-items:center;
-    gap:8px;
-    flex:1;
-    min-width:0;
-  }
-  .file-info .fname{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; }
-  .file-info .fsize{ color:var(--ink-soft); font-style:italic; white-space:nowrap; }
-  .file-remove{
-    background:none;
-    border:none;
-    color:var(--maroon);
-    font-size:1.2em;
-    line-height:1;
-    cursor:pointer;
-    padding:0 4px;
-  }
-  .file-error{
-    color:var(--maroon);
-    font-size:clamp(.76rem, 1.35vh, .9rem);
-    font-style:italic;
-    margin-top:5px;
   }
 
   .meta{
@@ -293,55 +220,14 @@
   }
   button#gen:hover{ background:#7f2727; transform:translateY(-1px); box-shadow:0 10px 22px rgba(80,20,20,.4); }
   button#gen:active{ transform:translateY(0); }
-  button#gen:disabled{ opacity:.45; cursor:not-allowed; box-shadow:none; transform:none; }
-  button#gen:disabled:hover{ background:var(--maroon); }
-
-  .progress-wrap{
-    margin-top:clamp(6px, 1.1vh, 12px);
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    gap:10px;
-    flex-wrap:wrap;
-  }
-  .progress-wrap[hidden]{ display:none; }
-  .progress-bar{
-    flex:0 1 220px;
-    height:7px;
-    background:rgba(90,60,20,.18);
-    border-radius:999px;
-    overflow:hidden;
-  }
-  .progress-fill{
-    display:block;
-    height:100%;
-    width:0%;
-    background:linear-gradient(90deg, var(--gold), var(--maroon));
-    transition:width .2s ease;
-  }
-  .progress-label{
-    font-size:clamp(.78rem, 1.4vh, .92rem);
-    color:var(--ink-soft);
-    font-style:italic;
-    white-space:nowrap;
-  }
-  .cancel-btn{
-    background:transparent;
-    border:1px solid var(--maroon);
-    color:var(--maroon);
-    font-size:clamp(.7rem, 1.25vh, .84rem);
-    letter-spacing:.05em;
-    text-transform:uppercase;
-    padding:3px 10px;
-    border-radius:2px;
-    cursor:pointer;
-  }
-  .cancel-btn:hover{ background:var(--maroon); color:#fff8e8; }
 
   .results{
     margin-top:clamp(6px, 1.2vh, 14px);
     display:grid;
-    grid-template-columns:1fr 1fr;
+    grid-template-columns:1fr;
+    max-width:460px;
+    margin-left:auto;
+    margin-right:auto;
     gap:clamp(10px, 1.6vw, 18px);
   }
 
@@ -454,46 +340,18 @@
         entre libros de puro ruido, ya estaba escrita tambien su historia.
       </div>
 
-      <div class="mode-toggle">
-        <button type="button" class="mode-btn active" id="modeTextBtn">Texto</button>
-        <button type="button" class="mode-btn" id="modeFileBtn">Archivo</button>
-      </div>
-
-      <div id="paneText">
+      <div>
         <label for="input" id="t-label">Escribi una palabra, una frase, lo que quieras encontrar en la biblioteca:</label>
         <textarea id="input" maxlength="3000" placeholder="por ejemplo: Esteban ama a Lea"></textarea>
         <div class="meta"><span id="count"></span><span id="t-hint"></span></div>
       </div>
 
-      <div id="paneFile" hidden>
-        <label id="t-fileLabel">Subi un archivo chiquito para interpretar sus bytes:</label>
-        <div class="file-box">
-          <input type="file" id="fileInput" hidden>
-          <button type="button" class="file-choose-btn" id="fileChooseBtn">Elegir archivo</button>
-          <div class="file-info" id="fileInfo"></div>
-        </div>
-        <div class="file-error" id="fileError" hidden></div>
-        <div class="meta"><span></span><span id="t-fileHint">cuanto mas pesa el archivo, mas tarda en calcular la ruta</span></div>
-      </div>
-
       <button id="gen">Generar ruta</button>
-
-      <div class="progress-wrap" id="progressWrap" hidden>
-        <div class="progress-bar"><span class="progress-fill" id="progressFill"></span></div>
-        <div class="progress-label" id="progressLabel">Generando...</div>
-        <button type="button" class="cancel-btn" id="cancelBtn">Cancelar</button>
-      </div>
 
       <div class="results">
         <div class="panel">
-          <h3>&#8862; Windows</h3>
           <div class="path-box empty" id="winPath">Escribi algo y presiona "Generar ruta"</div>
           <button class="copy-btn" data-target="winPath">Copiar</button>
-        </div>
-        <div class="panel">
-          <h3>&#63743; macOS</h3>
-          <div class="path-box empty" id="macPath">Escribi algo y presiona "Generar ruta"</div>
-          <button class="copy-btn" data-target="macPath">Copiar</button>
         </div>
       </div>
 
@@ -501,8 +359,8 @@
         <span class="how-label">Como usarlo</span>
         <ol>
           <li>Conecta el pendrive.</li>
-          <li>En el explorador abrir la unidad llamada <b>disk</b>.</li>
-          <li>Pega la ruta de arriba despues de <b>disk\</b> (Windows) o <b>disk/</b> (Mac): ahi, entre miles de millones de carpetas de puro ruido, los espera un archivo llamado <b>file</b>.</li>
+          <li>En el explorador de Windows, hace click en la barra de direcciones y pega la ruta de arriba completa, despues presiona Enter.</li>
+          <li>Vas a llegar directo a un archivo de texto llamado <b>file.txt</b>.</li>
           <li>Copialo a otra carpeta de tu computadora antes de abrirlo.</li>
         </ol>
       </div>
@@ -513,97 +371,125 @@
 
 <script>
 (function(){
-  var ALPHABET = ["A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z","0","1","2","3","4","5","6","7","8","9","!","&","(",")","-","_","+","[","]","^","="];
-  var NAME_LENGTH = 2n;
-  var ALPHABET_LENGTH = BigInt(ALPHABET.length);
-  var DIRECTORY_OBJECTS = ALPHABET_LENGTH ** NAME_LENGTH;
-  var MAX_FILE_BYTES = 30000;
+  // Mirrors Jorge Luis Borges' "La biblioteca de Babel" as NARRATIVE FLAVOR: the path always
+  // starts with Hexagono, Pared, Estante, Libro, Pagina, Linea, in that order, with Borges' own
+  // counts at each - but these don't encode anything (the firmware skips them entirely when
+  // reconstructing the message), so ANY number at each of those levels leads to the exact same
+  // file.txt. A random one is picked each time purely so it feels like wandering into a genuine,
+  // differently-numbered corner of the library rather than always the literal same "Hexagono-1".
+  // The actual message is encoded entirely in the folders AFTER that decorative intro, which are
+  // all UNIFORM: plain-numbered folders ("1" to CARACTER_COUNT), repeating as many times as
+  // needed. This MUST stay in lockstep with the firmware (src/monolith/usb_mtp_impl.c.h) and
+  // file-to-path.js.
+  var DECORATIVE_LEVELS = [
+    { name: "Hexagono", count: 47 },
+    { name: "Pared",    count: 4 },
+    { name: "Estante",  count: 5 },
+    { name: "Libro",    count: 32 },
+    { name: "Pagina",   count: 410 },
+    { name: "Linea",    count: 40 }
+  ];
+  var CARACTER_COUNT = 20; // how many numbered folders per real (post-decorative) level - kept
+  // small so Windows finishes enumerating a level before navigating further (see the firmware's
+  // BABEL_CARACTER_COUNT comment in src/monolith/usb_mtp_impl.c.h for why)
 
+  // Separate, much smaller alphabet for the file CONTENT itself - letters (both cases
+  // preserved), space, and basic punctuation, no digits or arbitrary bytes. This keeps paths
+  // meaningfully shorter per character than encoding raw UTF-8 bytes would, at the cost of only
+  // supporting plain text. Accented letters are folded to their same-case base letter (see
+  // ACCENT_FOLD below) rather than dropped outright. MUST stay in lockstep with file-to-path.js
+  // and the firmware's babel_content_alphabet (src/monolith/usb_mtp_impl.c.h).
+  var CONTENT_ALPHABET = [" ",
+    "A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z",
+    "a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z",
+    ".",",","!","?","'","-"];
+  var CONTENT_INDEX = {};
+  CONTENT_ALPHABET.forEach(function(ch, i){ CONTENT_INDEX[ch] = i; });
+
+  // Common Spanish/French accented letters folded to their same-case plain ASCII base letter.
+  var ACCENT_FOLD = {
+    "Á":"A", "À":"A", "Â":"A", "Ä":"A", "Ã":"A",
+    "É":"E", "È":"E", "Ê":"E", "Ë":"E",
+    "Í":"I", "Ì":"I", "Î":"I", "Ï":"I",
+    "Ó":"O", "Ò":"O", "Ô":"O", "Ö":"O", "Õ":"O",
+    "Ú":"U", "Ù":"U", "Û":"U", "Ü":"U",
+    "Ñ":"N", "Ç":"C",
+    "á":"a", "à":"a", "â":"a", "ä":"a", "ã":"a",
+    "é":"e", "è":"e", "ê":"e", "ë":"e",
+    "í":"i", "ì":"i", "î":"i", "ï":"i",
+    "ó":"o", "ò":"o", "ô":"o", "ö":"o", "õ":"o",
+    "ú":"u", "ù":"u", "û":"u", "ü":"u",
+    "ñ":"n", "ç":"c"
+  };
+
+  function sanitizeContentText(text){
+    var out = "";
+    for (var i = 0; i < text.length; i++){
+      var ch = text[i];
+      if (ACCENT_FOLD.hasOwnProperty(ch)) ch = ACCENT_FOLD[ch];
+      if (CONTENT_INDEX.hasOwnProperty(ch)) out += ch;
+    }
+    return out;
+  }
+
+  // Zero-pads to the width `maxValue` needs (e.g. maxValue=410 -> width 3, so "69" becomes
+  // "069"). This makes Explorer's default lexicographic sort order match numeric order exactly
+  // ("069" before "070" before "100", same as 69 < 70 < 100) - without it, a human scanning a
+  // long alphabetically-sorted list of plain numbers can easily click an adjacent-but-wrong one
+  // (e.g. "17" sorts nowhere near "9" in a dictionary-order listing of 1..20). MUST match the
+  // firmware's babel_digit_width/babel_write_prefixed_number exactly.
+  function digitWidth(maxValue){
+    return String(maxValue).length;
+  }
+  function padNumber(n, width){
+    var s = String(n);
+    while (s.length < width) s = "0" + s;
+    return s;
+  }
+
+  // Path is built root-to-leaf (appended, not prepended): the fixed decorative intro first,
+  // then one uniform-radix digit per subsequent folder, in the order the firmware naturally
+  // visits folders in (needing nothing but "how deep am I" to know whether it's still in the
+  // decorative intro or into the real numbered levels).
   function textToPath(text, separator){
-    var bytes = new TextEncoder().encode(text);
+    var sanitized = sanitizeContentText(text);
     var index = 0n;
-    for (var i = 0n; i < BigInt(bytes.length); i++){
-      index += (BigInt(bytes[Number(i)]) + 1n) * (256n ** i);
+    var contentRadix = BigInt(CONTENT_ALPHABET.length);
+    for (var i = 0n; i < BigInt(sanitized.length); i++){
+      var charIndex = CONTENT_INDEX[sanitized[Number(i)]];
+      index += (BigInt(charIndex) + 1n) * (contentRadix ** i);
     }
     var path = "";
+    for (var d = 0; d < DECORATIVE_LEVELS.length; d++){
+      var level = DECORATIVE_LEVELS[d];
+      var pick = Math.floor(Math.random() * level.count) + 1; // cosmetic only, any value works
+      path = path + separator + level.name + "-" + padNumber(pick, digitWidth(level.count));
+    }
+    var caracterRadix = BigInt(CARACTER_COUNT);
+    var caracterWidth = digitWidth(CARACTER_COUNT);
     while (index > 0n){
       index -= 1n;
-      var handle = index % DIRECTORY_OBJECTS;
-      var segment = "";
-      for (var j = 0; j < Number(NAME_LENGTH); j++){
-        segment = ALPHABET[Number(handle % ALPHABET_LENGTH)] + segment;
-        handle /= ALPHABET_LENGTH;
-      }
-      path = separator + segment + path;
-      index /= DIRECTORY_OBJECTS;
+      var handle = index % caracterRadix;
+      path = path + separator + padNumber(Number(handle) + 1, caracterWidth);
+      index /= caracterRadix;
     }
     return path;
   }
-
-  function formatSize(bytes){
-    if (bytes < 1024) return bytes + " B";
-    return (bytes / 1024).toFixed(1) + " KB";
-  }
-
-  function workerMain(){
-    self.onmessage = function(e){
-      var ALPHABET = ["A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z","0","1","2","3","4","5","6","7","8","9","!","&","(",")","-","_","+","[","]","^","="];
-      var AL = BigInt(ALPHABET.length);
-      var DO = AL * AL;
-      var bytes = new Uint8Array(e.data);
-      var n = bytes.length;
-      var index = 0n;
-      for (var i = 0; i < n; i++){
-        index += (BigInt(bytes[i]) + 1n) * (256n ** BigInt(i));
-      }
-      var segments = [];
-      var estimateTotal = Math.max(1, Math.ceil(n * 8 / 11.2288));
-      var iter = 0;
-      while (index > 0n){
-        index -= 1n;
-        var handle = index % DO;
-        var seg = "";
-        for (var j = 0; j < 2; j++){
-          seg = ALPHABET[Number(handle % AL)] + seg;
-          handle /= AL;
-        }
-        segments.unshift(seg);
-        index /= DO;
-        iter++;
-        if (iter % 80 === 0){
-          self.postMessage({ type: "progress", count: segments.length, estimateTotal: estimateTotal });
-        }
-      }
-      self.postMessage({ type: "done", segments: segments });
-    };
-  }
-  var workerBlob = new Blob(["(" + workerMain.toString() + ")();"], { type: "application/javascript" });
-  var workerUrl = URL.createObjectURL(workerBlob);
-  var currentWorker = null;
 
   var i18n = {
     es: {
       eyebrow: "un pendrive con todo el conocimiento del mundo",
       subtitle: "«El universo (que otros llaman la Biblioteca)...»",
       dedicationHtml: "Para <b>Esteban y Lea</b> &mdash; en algun anaquel de esta biblioteca infinita, entre libros de puro ruido, ya estaba escrita tambien su historia.",
-      modeTextLabel: "Texto",
-      modeFileLabel: "Archivo",
       label: "Escribi una palabra, una frase, lo que quieras encontrar en la biblioteca:",
       placeholder: "por ejemplo: Esteban ama a Lea",
       limitReached: "limite de {n} caracteres alcanzado",
-      hint: "",
-      fileLabel: "Subi un archivo chiquito para interpretar sus bytes:",
-      fileChooseLabel: "Elegir archivo",
-      fileHint: "cuanto mas pesa el archivo, mas tarda en calcular la ruta",
-      fileTooBig: "Ese archivo pesa demasiado ({size}). El maximo es {max}.",
-      generatingLabel: "Generando",
-      cancelLabel: "Cancelar",
+      hint: "Solo letras, espacios y puntuacion basica (. , ! ? ' -); los acentos se simplifican automaticamente.",
       genBtn: "Generar ruta",
       emptyPath: "Escribi algo y presiona \"Generar ruta\"",
-      emptyPathFile: "Subi un archivo y presiona \"Generar ruta\"",
       copyBtn: "Copiar",
       copiedBtn: "¡Copiado!",
-      instructionsHtml: "<span class=\"how-label\">Como usarlo</span><ol><li>Conecta el pendrive.</li><li>En el explorador abrir la unidad llamada <b>disk</b>.</li><li>Pega la ruta de arriba despues de <b>disk\\</b> (Windows) o <b>disk/</b> (Mac): ahi, entre miles de millones de carpetas de puro ruido, los espera un archivo llamado <b>file</b>.</li><li>Copialo a otra carpeta de tu computadora antes de abrirlo.</li></ol>",
+      instructionsHtml: "<span class=\"how-label\">Como usarlo</span><ol><li>Conecta el pendrive.</li><li>En el explorador de Windows, hace click en la barra de direcciones y pega la ruta de arriba completa, despues presiona Enter.</li><li>Vas a llegar directo a un archivo de texto llamado <b>file.txt</b>.</li><li>Copialo a otra carpeta de tu computadora antes de abrirlo.</li></ol>",
       footer: "Biblioteca de Babel · Jorge Luis Borges, 1941 - reinterpretada en silicio por Julian Atlasovich 2026",
       caption: "galeria hexagonal, una entre infinitas",
       toggleLabel: "FR",
@@ -614,24 +500,15 @@
       eyebrow: "une clé usb contenant tout le savoir du monde",
       subtitle: "«L'univers (que d'autres appellent la Bibliothèque)...»",
       dedicationHtml: "Pour <b>Esteban et Lea</b> &mdash; quelque part sur une étagère de cette bibliothèque infinie, parmi des livres de pur bruit, leur histoire était déjà écrite.",
-      modeTextLabel: "Texte",
-      modeFileLabel: "Fichier",
       label: "Écrivez un mot, une phrase, ce que vous voulez retrouver dans la bibliothèque :",
       placeholder: "par exemple : Esteban aime Lea",
       limitReached: "limite de {n} caractères atteinte",
-      hint: "",
-      fileLabel: "Téléversez un petit fichier pour interpréter ses octets :",
-      fileChooseLabel: "Choisir un fichier",
-      fileHint: "plus le fichier est lourd, plus le calcul est long",
-      fileTooBig: "Ce fichier est trop lourd ({size}). Le maximum est {max}.",
-      generatingLabel: "Génération",
-      cancelLabel: "Annuler",
+      hint: "Uniquement des lettres, des espaces et une ponctuation simple (. , ! ? ' -) ; les accents sont automatiquement simplifiés.",
       genBtn: "Générer le chemin",
       emptyPath: "Écrivez quelque chose et appuyez sur « Générer le chemin »",
-      emptyPathFile: "Téléversez un fichier et appuyez sur « Générer le chemin »",
       copyBtn: "Copier",
       copiedBtn: "Copié !",
-      instructionsHtml: "<span class=\"how-label\">Comment l'utiliser</span><ol><li>Branchez la clé USB.</li><li>Dans l'explorateur, ouvrez le disque nommé <b>disk</b>.</li><li>Collez le chemin ci-dessus après <b>disk\\</b> (Windows) ou <b>disk/</b> (Mac) : là, parmi des milliards de dossiers de pur bruit, un fichier nommé <b>file</b> vous attend.</li><li>Copiez-le dans un autre dossier de votre ordinateur avant de l'ouvrir.</li></ol>",
+      instructionsHtml: "<span class=\"how-label\">Comment l'utiliser</span><ol><li>Branchez la clé USB.</li><li>Dans l'explorateur Windows, cliquez sur la barre d'adresse et collez le chemin ci-dessus en entier, puis appuyez sur Entrée.</li><li>Vous arriverez directement sur un fichier texte nommé <b>file.txt</b>.</li><li>Copiez-le dans un autre dossier de votre ordinateur avant de l'ouvrir.</li></ol>",
       footer: "La Bibliothèque de Babel · Jorge Luis Borges, 1941 - réinterprétée en silicium par Julian Atlasovich 2026",
       caption: "galerie hexagonale, une parmi l'infini",
       toggleLabel: "ES",
@@ -641,11 +518,7 @@
   };
 
   var currentLang = "es";
-  var currentMode = "text";
-  var generating = false;
   var lastWin = null;
-  var lastMac = null;
-  var fileState = { file: null, bytes: null, error: null };
 
   var els = {
     eyebrow: document.getElementById("t-eyebrow"),
@@ -660,40 +533,17 @@
     input: document.getElementById("input"),
     count: document.getElementById("count"),
     winPath: document.getElementById("winPath"),
-    macPath: document.getElementById("macPath"),
-    gen: document.getElementById("gen"),
-    modeTextBtn: document.getElementById("modeTextBtn"),
-    modeFileBtn: document.getElementById("modeFileBtn"),
-    paneText: document.getElementById("paneText"),
-    paneFile: document.getElementById("paneFile"),
-    fileLabel: document.getElementById("t-fileLabel"),
-    fileHint: document.getElementById("t-fileHint"),
-    fileChooseBtn: document.getElementById("fileChooseBtn"),
-    fileInput: document.getElementById("fileInput"),
-    fileInfo: document.getElementById("fileInfo"),
-    fileError: document.getElementById("fileError"),
-    progressWrap: document.getElementById("progressWrap"),
-    progressFill: document.getElementById("progressFill"),
-    progressLabel: document.getElementById("progressLabel"),
-    cancelBtn: document.getElementById("cancelBtn")
+    gen: document.getElementById("gen")
   };
 
   function renderPaths(){
     var t = i18n[currentLang];
-    var placeholder = currentMode === "file" ? t.emptyPathFile : t.emptyPath;
     if (lastWin === null){
-      els.winPath.textContent = placeholder;
+      els.winPath.textContent = t.emptyPath;
       els.winPath.classList.add("empty");
     } else {
-      els.winPath.textContent = "disk" + lastWin;
+      els.winPath.textContent = "This PC\\USB of Babel\\disk" + lastWin;
       els.winPath.classList.remove("empty");
-    }
-    if (lastMac === null){
-      els.macPath.textContent = placeholder;
-      els.macPath.classList.add("empty");
-    } else {
-      els.macPath.textContent = "disk" + lastMac;
-      els.macPath.classList.remove("empty");
     }
   }
 
@@ -707,137 +557,6 @@
     }
   }
 
-  function renderFileInfo(){
-    var t = i18n[currentLang];
-    els.fileInfo.innerHTML = "";
-    if (fileState.file){
-      var nameSpan = document.createElement("span");
-      nameSpan.className = "fname";
-      nameSpan.textContent = fileState.file.name;
-      var sizeSpan = document.createElement("span");
-      sizeSpan.className = "fsize";
-      sizeSpan.textContent = formatSize(fileState.file.size);
-      var removeBtn = document.createElement("button");
-      removeBtn.type = "button";
-      removeBtn.className = "file-remove";
-      removeBtn.textContent = "×";
-      removeBtn.addEventListener("click", clearFile);
-      els.fileInfo.appendChild(nameSpan);
-      els.fileInfo.appendChild(sizeSpan);
-      els.fileInfo.appendChild(removeBtn);
-    }
-    if (fileState.error){
-      els.fileError.textContent = fileState.error;
-      els.fileError.hidden = false;
-    } else {
-      els.fileError.hidden = true;
-    }
-  }
-
-  function updateGenEnabled(){
-    if (generating){
-      els.gen.disabled = true;
-      return;
-    }
-    if (currentMode === "file"){
-      els.gen.disabled = !fileState.bytes || !!fileState.error;
-    } else {
-      els.gen.disabled = false;
-    }
-  }
-
-  function setMode(mode){
-    currentMode = mode;
-    els.modeTextBtn.classList.toggle("active", mode === "text");
-    els.modeFileBtn.classList.toggle("active", mode === "file");
-    els.paneText.hidden = mode !== "text";
-    els.paneFile.hidden = mode !== "file";
-    lastWin = null;
-    lastMac = null;
-    hideProgress();
-    renderPaths();
-    updateGenEnabled();
-  }
-
-  function clearFile(){
-    fileState = { file: null, bytes: null, error: null };
-    els.fileInput.value = "";
-    renderFileInfo();
-    updateGenEnabled();
-  }
-
-  function handleFileSelected(f){
-    if (!f){ clearFile(); return; }
-    var t = i18n[currentLang];
-    if (f.size > MAX_FILE_BYTES){
-      fileState.file = f;
-      fileState.bytes = null;
-      fileState.error = t.fileTooBig.replace("{size}", formatSize(f.size)).replace("{max}", formatSize(MAX_FILE_BYTES));
-      renderFileInfo();
-      updateGenEnabled();
-      return;
-    }
-    var reader = new FileReader();
-    reader.onload = function(){
-      fileState.file = f;
-      fileState.bytes = new Uint8Array(reader.result);
-      fileState.error = null;
-      renderFileInfo();
-      updateGenEnabled();
-    };
-    reader.readAsArrayBuffer(f);
-  }
-
-  function showProgress(){
-    els.progressWrap.hidden = false;
-    els.progressFill.style.width = "0%";
-  }
-  function hideProgress(){
-    els.progressWrap.hidden = true;
-  }
-  function updateProgress(pct){
-    els.progressFill.style.width = pct + "%";
-    var t = i18n[currentLang];
-    els.progressLabel.textContent = t.generatingLabel + "… " + pct + "%";
-  }
-
-  function finishGeneration(){
-    generating = false;
-    currentWorker = null;
-    hideProgress();
-    updateGenEnabled();
-  }
-
-  function startFileGeneration(){
-    if (!fileState.bytes || fileState.error) return;
-    generating = true;
-    updateGenEnabled();
-    showProgress();
-    updateProgress(0);
-    var worker = new Worker(workerUrl);
-    currentWorker = worker;
-    worker.onmessage = function(e){
-      var msg = e.data;
-      if (msg.type === "progress"){
-        var pct = Math.min(99, Math.round(100 * msg.count / msg.estimateTotal));
-        updateProgress(pct);
-      } else if (msg.type === "done"){
-        var segments = msg.segments;
-        lastWin = segments.length ? ("\\" + segments.join("\\")) : "";
-        lastMac = segments.length ? ("/" + segments.join("/")) : "";
-        worker.terminate();
-        updateProgress(100);
-        renderPaths();
-        setTimeout(finishGeneration, 300);
-      }
-    };
-    worker.onerror = function(){
-      worker.terminate();
-      finishGeneration();
-    };
-    worker.postMessage(fileState.bytes.buffer.slice(0));
-  }
-
   function applyLanguage(lang){
     currentLang = lang;
     var t = i18n[lang];
@@ -846,15 +565,9 @@
     els.eyebrow.textContent = t.eyebrow;
     els.subtitle.textContent = t.subtitle;
     els.dedication.innerHTML = t.dedicationHtml;
-    els.modeTextBtn.textContent = t.modeTextLabel;
-    els.modeFileBtn.textContent = t.modeFileLabel;
     els.label.textContent = t.label;
     els.input.placeholder = t.placeholder;
     els.hint.textContent = t.hint;
-    els.fileLabel.textContent = t.fileLabel;
-    els.fileChooseBtn.textContent = t.fileChooseLabel;
-    els.fileHint.textContent = t.fileHint;
-    els.cancelBtn.textContent = t.cancelLabel;
     els.gen.textContent = t.genBtn;
     els.instructions.innerHTML = t.instructionsHtml;
     els.footer.textContent = t.footer;
@@ -863,52 +576,40 @@
     document.querySelectorAll(".copy-btn").forEach(function(btn){
       btn.textContent = t.copyBtn;
     });
-    if (fileState.error && fileState.file){
-      fileState.error = t.fileTooBig.replace("{size}", formatSize(fileState.file.size)).replace("{max}", formatSize(MAX_FILE_BYTES));
-    }
-    renderFileInfo();
     updateCount();
     renderPaths();
   }
 
-  els.input.addEventListener("input", updateCount);
+  // Sanitizes as the user types, so what's visible in the textarea always matches exactly what
+  // will be encoded (accents folded, unsupported characters dropped) - no surprises at "Generar".
+  function sanitizeInputLive(){
+    var raw = els.input.value;
+    var sanitized = sanitizeContentText(raw);
+    if (sanitized !== raw){
+      var pos = els.input.selectionStart;
+      var removedBefore = raw.length - sanitized.length;
+      els.input.value = sanitized;
+      var newPos = Math.max(0, Math.min(sanitized.length, pos - removedBefore));
+      els.input.setSelectionRange(newPos, newPos);
+    }
+    updateCount();
+  }
+
+  els.input.addEventListener("input", sanitizeInputLive);
 
   function generate(){
-    if (generating) return;
-    if (currentMode === "text"){
-      var text = els.input.value;
-      if (!text.trim()){
-        lastWin = null;
-        lastMac = null;
-      } else {
-        lastWin = textToPath(text, "\\");
-        lastMac = textToPath(text, "/");
-      }
-      renderPaths();
+    var sanitized = sanitizeContentText(els.input.value);
+    if (!sanitized){
+      lastWin = null;
     } else {
-      startFileGeneration();
+      lastWin = textToPath(els.input.value, "\\");
     }
+    renderPaths();
   }
 
   els.gen.addEventListener("click", generate);
   els.input.addEventListener("keydown", function(e){
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) generate();
-  });
-
-  els.modeTextBtn.addEventListener("click", function(){ setMode("text"); });
-  els.modeFileBtn.addEventListener("click", function(){ setMode("file"); });
-
-  els.fileChooseBtn.addEventListener("click", function(){ els.fileInput.click(); });
-  els.fileInput.addEventListener("change", function(){
-    handleFileSelected(els.fileInput.files[0]);
-  });
-
-  els.cancelBtn.addEventListener("click", function(){
-    if (currentWorker){
-      currentWorker.terminate();
-      currentWorker = null;
-    }
-    finishGeneration();
   });
 
   els.toggle.addEventListener("click", function(){

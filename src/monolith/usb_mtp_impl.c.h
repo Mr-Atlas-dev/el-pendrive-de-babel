@@ -28,6 +28,8 @@
 #include <sys/unistd.h>
 #include <sys/stat.h>
 #include <math.h>
+#include <stdio.h> // snprintf, used by babel_name_at and the TEMPORARY debug dump in fs_get_object
+#include <stdarg.h> // TEMPORARY: va_list for babel_dbg_append, remove along with it
 #include "esp_log.h"
 #include "tusb.h"
 #include "util.h"
@@ -587,25 +589,457 @@ static int32_t fs_get_device_info(tud_mtp_cb_data_t* cb_data) {
   return 0;
 }
 
-#define BABEL_MAX_NAME_LENGTH 2
-#define BABEL_ALPHABET_LENGTH 47
+// Mirrors Jorge Luis Borges' "La biblioteca de Babel" as NARRATIVE FLAVOR: the first six levels
+// you walk through are always named Hexagono, Pared, Estante, Libro, Pagina, Linea, in that
+// order, with Borges' own counts at each (47 hexagons, 4 walls, 5 shelves, 32 books, 410 pages,
+// 40 lines) - but they don't encode anything. babel_compute_index_for skips depths below
+// BABEL_DECORATIVE_DEPTH entirely when accumulating the content index, so ANY combination of
+// choices through these six levels leads to the exact same file.txt underneath - they're purely
+// corridors to wander, giving the "infinite library" feel without any of them being load-bearing
+// for the actual message. They also have no file.txt of their own (see babel_level_has_file) -
+// reading one partway through a convergent decorative path would be meaningless, so it simply
+// isn't offered until the real, numbered levels begin.
+//
+// The actual message is encoded entirely in the folders AFTER that decorative intro, which are
+// all UNIFORM: plain-numbered folders ("1" to BABEL_CARACTER_COUNT), repeating as many times as
+// needed - no per-level special-casing, and only ONE listing width to ever worry about for the
+// part that actually matters. This MUST stay in lockstep with docs/index.html and file-to-path.js.
+#define BABEL_DECORATIVE_DEPTH 6
+static const char* babel_decorative_names[BABEL_DECORATIVE_DEPTH] = {
+  "Hexagono", "Pared", "Estante", "Libro", "Pagina", "Linea"
+};
+static const uint32_t babel_decorative_counts[BABEL_DECORATIVE_DEPTH] = {
+  47, 4, 5, 32, 410, 40
+};
+// How many numbered folders exist at each REAL (post-decorative) level. Kept deliberately small
+// (not the original 100) so Windows Explorer finishes enumerating a level's GetObjectInfo calls
+// quickly - debug captures showed Explorer racing its own background folder-view enumeration
+// against address-bar path resolution on 100-wide listings, sometimes navigating into whichever
+// item it happened to have queried most recently rather than the one actually named in the
+// path. A narrower level finishes enumerating fast enough that this race is far less likely to
+// still be in flight when the navigation step happens.
+#define BABEL_CARACTER_COUNT    20
 
-const char alphabet[BABEL_ALPHABET_LENGTH] = {
-  'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H',
-  'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P',
-  'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X',
-  'Y', 'Z', '0', '1', '2', '3',
-  '4', '5', '6', '7', '8', '9', '!',
-  '&', '(', ')', '-', '_', '+', '[', ']',
-  '^', '='
+// Separate, much smaller alphabet for the DECODED FILE CONTENT (what ends up inside file.txt) -
+// restricted to plain letters (both cases preserved), space, and basic punctuation, no digits,
+// no accents, no arbitrary bytes. This keeps the decode step a trivial 1-byte-out per-digit
+// lookup and makes paths meaningfully shorter per character than the old full 256-byte-per-
+// character scheme. Accented input (á, Ñ, etc.) is folded to its same-case base letter by the
+// website/file-to-path.js before encoding, rather than dropped outright. MUST stay in lockstep
+// with docs/index.html and file-to-path.js.
+#define BABEL_CONTENT_ALPHABET_LENGTH 59
+const char babel_content_alphabet[BABEL_CONTENT_ALPHABET_LENGTH] = {
+  ' ',
+  'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
+  'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
+  'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
+  'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
+  '.', ',', '!', '?', '\'', '-'
 };
 
+// Returns the branch count (number of subdirectories, NOT counting the trailing "file.txt"
+// leaf, if any - see babel_level_has_file) for the given 0-indexed depth from the root.
+static uint32_t babel_branch_at(uint32_t depth) {
+  if (depth < BABEL_DECORATIVE_DEPTH) return babel_decorative_counts[depth];
+  return BABEL_CARACTER_COUNT;
+}
+
+// Whether the level at this depth offers a "file.txt" alongside its subfolder choices.
+// Decorative levels don't (see the design note above) - only once the real, numbered levels
+// begin does every listing include one.
+static bool babel_level_has_file(uint32_t depth) {
+  return depth >= BABEL_DECORATIVE_DEPTH;
+}
+
+uint16_t babel_name_buf[16] = {0};
+
+// How many digits `max_value` needs in base 10 - used to zero-pad folder numbers so Explorer's
+// (lexicographic, NOT numeric) default sort order matches numeric order exactly. Without this,
+// "17" sorts between "16" and "170"-style neighbors in a list that also contains "2".."9", while
+// visually a human scanning the list expects "9" to come right after "8" - debug captures showed
+// exactly this kind of plausible-looking-but-wrong folder getting opened instead of the one
+// actually named in the generated path. Zero-padding (e.g. "01".."20") makes string order and
+// numeric order identical, removing that whole class of mis-click.
+static int babel_digit_width(uint32_t max_value) {
+  int width = 1;
+  uint32_t threshold = 10;
+  while (max_value >= threshold) {
+    width++;
+    threshold *= 10;
+  }
+  return width;
+}
+
+// Writes "<prefix><zero-padded number>" (ASCII, widened to UTF-16) into babel_name_buf, where an
+// empty prefix just gives a plain number (used for the real, post-decorative numbered levels).
+// `width` is the minimum digit count (see babel_digit_width) - MUST match exactly what
+// docs/index.html and file-to-path.js generate, since MTP path resolution needs an exact string
+// match. Returns the number of UTF-16 units written (excluding the null terminator).
+static int babel_write_prefixed_number(const char* prefix, uint32_t number, int width) {
+  int n = 0;
+  for (const char* p = prefix; *p; p++) {
+    babel_name_buf[n++] = (uint16_t)(uint8_t)(*p);
+  }
+  char digits[16];
+  int dn = 0;
+  if (number == 0) {
+    digits[dn++] = '0';
+  } else {
+    while (number > 0) {
+      digits[dn++] = (char)('0' + (number % 10));
+      number /= 10;
+    }
+  }
+  while (dn < width) {
+    digits[dn++] = '0'; // zero-pad: appended here (LSB-first order), ends up on the LEFT once reversed below
+  }
+  for (int i = dn - 1; i >= 0; i--) {
+    babel_name_buf[n++] = (uint16_t)(uint8_t) digits[i];
+  }
+  babel_name_buf[n] = 0;
+  return n;
+}
+
+// Writes the display name for local_index (0-based, < babel_branch_at(depth)) into
+// babel_name_buf. Returns the number of UTF-16 units written (excluding the null).
+static int babel_name_at(uint32_t depth, uint32_t local_index) {
+  int width = babel_digit_width(babel_branch_at(depth));
+  if (depth < BABEL_DECORATIVE_DEPTH) {
+    char prefix[16];
+    snprintf(prefix, sizeof(prefix), "%s-", babel_decorative_names[depth]);
+    return babel_write_prefixed_number(prefix, local_index + 1, width);
+  }
+  return babel_write_prefixed_number("", local_index + 1, width);
+}
+
+// output_file accumulates, as you descend, the "index" (per the same bijective big-number
+// scheme file-to-path.js uses to go the other way: index = sum (charIndex[i]+1)*59^i, over
+// each character of the sanitized input text mapped through babel_content_alphabet). Because
+// each directory level can now have a DIFFERENT width, this can no longer be done with the
+// original's single multiply-and-add-a-digit trick (that trick only works when every level
+// has the same width, which let it place the most-significant digit at the root without
+// knowing the total path length in advance). Instead, output_file accumulates a weighted
+// sum (output_file += (digit+1) * weight_file; weight_file *= radix), least-significant
+// digit first - i.e. root-to-leaf, which is exactly the order the firmware naturally visits
+// folders in, needing nothing but "how deep am I" to know the radix at each step.
+//
+// decoded_file holds the ACTUAL file content, computed on demand from output_file (via the
+// bijective base-59 decode, the exact inverse of file-to-path.js's/the website's encode) whenever a
+// "file.txt" object is actually read - not kept in sync on every descent, since decoding is
+// only needed when a file is opened, and changing output_file never invalidates it until
+// decode is re-run.
 uint8_t output_file[4096] = {0};
 size_t output_file_len = 0;
+uint8_t weight_file[4096] = {1};
+size_t weight_file_len = 1;
+uint8_t decoded_file[4096] = {0};
+size_t decoded_file_len = 0;
 
-uint32_t handle_count = 0;
-uint32_t path_depth = 0;
-uint32_t prev_parent_handle = 0;
+// Handles are table indices into a persistent, append-only BLOCK table - NOT pure arithmetic
+// (depth, local-choice) pairs, and NOT resolved relative to "wherever we last navigated to".
+// Each GetObjectHandles call allocates a fresh contiguous block of handles for the requested
+// parent's children, permanently recording that block's own parent handle and depth. This is
+// what lets GetObjectInfo/GetObject resolve ANY handle - both its displayed name AND its full
+// ancestor chain for content - purely from the handle table, with zero dependency on shared
+// "current position" state.
+//
+// That independence matters because Windows does NOT only send MTP commands that follow the
+// user's own clicks: background services - the Windows Search content indexer in particular,
+// which indexes .txt file contents by default - independently enumerate and read file.txt
+// objects as their own, fully separate transactions, interleaved in time with whatever the user
+// is doing (each individual transaction is atomic per TinyUSB's MTP driver, but nothing stops
+// an unrelated transaction from landing between two of the user's own). An earlier version of
+// this file tracked "current position" in a single global (nav_stack + a current depth), kept
+// in sync by every GetObjectHandles/GetObject call; that global got silently stomped by exactly
+// this kind of unrelated background traffic, corrupting the user's own navigation (hence folders
+// appearing empty or showing the wrong content after some browsing). With a handle table, there
+// IS no "current position" to stomp - every operation is a pure function of the handle(s) given.
+//
+// Listing the SAME parent twice returns the exact SAME block (see babel_find_children_block) -
+// blocks are memoized, not reallocated per call. This matters beyond just saving table space:
+// Windows' MTP/WPD shell extension caches object handles per visual item, and can hand back a
+// handle from an earlier visit when the user returns to "the same" folder. If re-listing ever
+// allocated a fresh block, that stale-but-still-valid cached handle could end up supplying a
+// DIFFERENT (older) ancestor for part of a chain than the one the user actually navigated this
+// time - corrupting exactly the early/cached part of a path while deeper, freshly-discovered
+// levels stay correct. Memoizing means there's only ever one true block per logical parent, so
+// no cached handle can ever disagree with a fresh one about what it points to. Blocks themselves
+// are still never deleted (handles stay valid forever once issued).
+typedef struct {
+  uint32_t parent_handle; // the object handle whose children this block represents (0xFFFFFFFF = root)
+  uint32_t depth;         // depth of every entry IN this block (parent's depth + 1; root's children are depth 0)
+  uint32_t start;         // first child handle in this contiguous block (handles start <= h < start+count)
+  uint32_t count;         // one slot per subfolder choice, plus one more for file.txt if babel_level_has_file(depth)
+} babel_block_t;
+
+// Never explicitly reset after this (correctly zero/one-initialized here, at firmware start) -
+// see the note in fs_open_close_session for why the table deliberately persists for the whole
+// device power-on lifetime rather than being wiped per MTP session.
+//
+// Sized to comfortably cover the website's 3000-character input cap: at ~5.88 bits/character
+// (log2(59), the content alphabet size) and ~6.52 bits/level average (the structural+numbered-
+// folder cycle), 3000 characters needs roughly 2700 levels in a straight-line path. 4096 leaves
+// real margin for exploration/backtracking on top of that, while keeping this table's footprint
+// (4096 * 16 bytes = 64KB) reasonable on a chip with no PSRAM - this previously sat at 8192
+// (128KB), a needlessly large chunk of the ESP32-S3's internal SRAM for what any real message
+// actually needs, and shrinking it is a safe hedge against any RAM-pressure-related corruption.
+#define BABEL_MAX_BLOCKS 4096
+babel_block_t babel_blocks[BABEL_MAX_BLOCKS];
+uint32_t babel_blocks_len = 0;
+uint32_t babel_next_handle = 1; // handle 0 is never issued (root is addressed as 0xFFFFFFFF instead)
+
+// Binary search for the block containing `handle` (blocks are appended in strictly increasing
+// `start` order, since handles only ever go up). Returns NULL if handle was never issued.
+static babel_block_t* babel_find_block(uint32_t handle) {
+  int32_t lo = 0, hi = (int32_t) babel_blocks_len - 1;
+  babel_block_t* found = NULL;
+  while (lo <= hi) {
+    int32_t mid = (lo + hi) / 2;
+    if (babel_blocks[mid].start <= handle) {
+      found = &babel_blocks[mid];
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return (found && handle < found->start + found->count) ? found : NULL;
+}
+
+// Returns the index of the EXISTING block for parent_handle's children, or -1 if that parent
+// has never been listed before. Memoizing this way (instead of always allocating a fresh block)
+// matters because Windows' MTP/WPD shell extension caches object handles per visual item across
+// a session (for icons, thumbnails, its own namespace identity) and can legitimately reuse a
+// handle from an earlier visit to "the same" folder when the user later opens a file.txt deep
+// inside it. If each re-listing got a brand-new block, a stale-but-still-valid cached handle
+// from an earlier (possibly different) exploration could end up supplying the wrong ancestor for
+// part of the chain - corrupting exactly the ancestor levels that were cached early, while
+// correctly-fresh deeper levels still decode fine (matching exactly the "first few characters
+// wrong, rest correct" pattern this was built to fix). Memoizing means a given parent_handle
+// ALWAYS maps to the one single, canonical children block - no matter when or how many times
+// it's revisited, there's only ever one true answer.
+static int32_t babel_find_children_block(uint32_t parent_handle) {
+  for (uint32_t i = 0; i < babel_blocks_len; i++) {
+    if (babel_blocks[i].parent_handle == parent_handle) {
+      return (int32_t) i;
+    }
+  }
+  return -1;
+}
+
+// Writes the (possibly memoized) block of handles for parent_handle's children to
+// *out_start/*out_branch (the block's actual handle count may be branch or branch+1 depending on
+// babel_level_has_file - see babel_block_t.count). Returns false (writing nothing) if
+// parent_handle is neither the root sentinel NOR a handle we can actually resolve in the table.
+//
+// That failure case matters a lot: it used to be silently treated as "must be a root-level
+// child" (falling back to depth 0 whenever babel_find_block came back empty). A non-root
+// parent_handle genuinely failing to resolve shouldn't happen now that the table persists for
+// the device's whole power-on lifetime (see fs_open_close_session), but defending against it
+// anyway is cheap insurance: silently guessing "depth 0" for an unresolvable handle would create
+// a real block at the WRONG depth, permanently misattributing every level built on top of it -
+// exactly the "early/ancestor levels wrong, later/freshly-discovered levels correct" pattern
+// this was fixed to prevent. Returning an error instead forces the host to recover by re-listing
+// from a handle it still actually has, rather than silently fabricating a wrong structure.
+static bool babel_list_children(uint32_t parent_handle, uint32_t* out_start, uint32_t* out_branch, uint32_t* out_handle_count) {
+  int32_t existing = babel_find_children_block(parent_handle);
+  if (existing >= 0) {
+    // NOT `count - 1`: count only equals branch+1 when babel_level_has_file(depth) is true -
+    // decorative levels have count == branch exactly (no file slot), so deriving branch that way
+    // would be off by one for them. Re-deriving from depth is correct unconditionally.
+    *out_branch = babel_branch_at(babel_blocks[existing].depth);
+    *out_start = babel_blocks[existing].start;
+    *out_handle_count = babel_blocks[existing].count;
+    return true;
+  }
+
+  uint32_t depth;
+  if (parent_handle == 0xFFFFFFFF) {
+    depth = 0;
+  } else {
+    babel_block_t* parent_block = babel_find_block(parent_handle);
+    if (!parent_block) {
+      return false; // unknown, non-root handle - do NOT guess its depth
+    }
+    depth = parent_block->depth + 1;
+  }
+  uint32_t branch = babel_branch_at(depth);
+  *out_branch = branch;
+  uint32_t count = branch + (babel_level_has_file(depth) ? 1 : 0);
+  *out_handle_count = count;
+
+  if (babel_blocks_len >= BABEL_MAX_BLOCKS) {
+    *out_start = babel_blocks[BABEL_MAX_BLOCKS - 1].start;
+    return true;
+  }
+
+  uint32_t start = babel_next_handle;
+  babel_blocks[babel_blocks_len++] = (babel_block_t){
+    .parent_handle = parent_handle,
+    .depth = depth,
+    .start = start,
+    .count = count
+  };
+  babel_next_handle += count;
+  *out_start = start;
+  return true;
+}
+
+// Resolves a handle to (depth, local_choice [1-based], branch), purely from the handle table -
+// no dependency on navigation history. Returns false if the handle was never issued.
+static bool babel_resolve_handle(uint32_t handle, uint32_t* out_depth, uint32_t* out_local_choice, uint32_t* out_branch) {
+  babel_block_t* block = babel_find_block(handle);
+  if (!block) return false;
+  *out_depth = block->depth;
+  *out_local_choice = handle - block->start + 1;
+  *out_branch = babel_branch_at(block->depth);
+  return true;
+}
+
+// dst (big-endian... no, little-endian byte array, dst[0] = least significant byte) *= scalar
+static void babel_buf_mul_scalar(uint8_t* buf, size_t* len, uint32_t scalar) {
+  size_t index = 0;
+  uint32_t carry = 0;
+  while (index < *len || carry) {
+    uint32_t digit = buf[index] * scalar + carry;
+    buf[index] = digit & 0xFF;
+    carry = digit >> 8;
+    if (++index > *len) {
+      buf[index] = 0;
+      *len = index;
+    }
+  }
+}
+
+// dst += src * scalar (multiply-accumulate; src is left untouched)
+static void babel_buf_mac(uint8_t* dst, size_t* dst_len, const uint8_t* src, size_t src_len, uint32_t scalar) {
+  size_t index = 0;
+  uint32_t carry = 0;
+  while (index < src_len || carry) {
+    uint32_t src_val = (index < src_len) ? src[index] : 0;
+    uint32_t digit = dst[index] + src_val * scalar + carry;
+    dst[index] = digit & 0xFF;
+    carry = digit >> 8;
+    if (++index > *dst_len) {
+      dst[index] = 0;
+      *dst_len = index;
+    }
+  }
+}
+
+// buf /= scalar (standard long division, most-significant byte first), returns buf % scalar.
+// Unlike babel_buf_mul_scalar/babel_buf_mac (which work a byte at a time because the multiplier
+// there is itself byte-sized, i.e. base 256), this is a genuine division of the arbitrary-
+// precision number by a scalar that does NOT divide 256 evenly (e.g. 59), needed because the
+// content alphabet's radix no longer lines up with the byte-array's own base-256 storage.
+static uint32_t babel_buf_divmod_scalar(uint8_t* buf, size_t* len, uint32_t scalar) {
+  uint32_t remainder = 0;
+  for (size_t i = *len; i-- > 0; ) {
+    uint32_t cur = (remainder << 8) | buf[i];
+    buf[i] = (uint8_t)(cur / scalar);
+    remainder = cur % scalar;
+  }
+  while (*len > 0 && buf[*len - 1] == 0) {
+    (*len)--;
+  }
+  return remainder;
+}
+
+// buf -= 1, with full (standard) borrow propagation. Used only by the decode step below.
+static void babel_buf_dec_standard(uint8_t* buf, size_t* len) {
+  size_t i = 0;
+  while (buf[i] == 0) {
+    buf[i] = 255;
+    i++;
+  }
+  buf[i]--;
+  while (*len > 0 && buf[*len - 1] == 0) {
+    (*len)--;
+  }
+}
+
+// Folds one more path level into the running index, exactly mirroring file-to-path.js's
+// own encode loop in reverse: output_file += (local_choice) * weight_file; weight_file *= radix.
+// local_choice is the 1-based local index chosen at the level with the given radix.
+static void fs_append_output(uint32_t local_choice, uint32_t radix) {
+  babel_buf_mac(output_file, &output_file_len, weight_file, weight_file_len, local_choice);
+  babel_buf_mul_scalar(weight_file, &weight_file_len, radix);
+}
+
+// Computes output_file/weight_file fresh for the folder identified by `parent_handle`
+// (0xFFFFFFFF = root), by walking the handle table from that handle up to the root (collecting
+// each ancestor's local choice along the way) and replaying those choices root-to-leaf. This
+// has NO dependency on any shared "current position" - it's a pure function of parent_handle
+// and the (permanent, append-only) handle table, so it's immune to whatever unrelated
+// GetObjectHandles/GetObject calls (e.g. background content indexing elsewhere in the tree)
+// happened in between. O(depth) handle-table lookups - only runs once per file.txt read, never
+// in a hot loop, so this is cheap even for a few thousand levels.
+//
+// Returns false if the walk hits an ancestor handle we can't resolve before reaching the root
+// sentinel. Shouldn't happen now that the table persists for the device's whole power-on
+// lifetime (see fs_open_close_session), but this MUST NOT be silently treated as "that's the
+// root, stop here" if it ever does: doing so would replay the remaining,
+// still-resolvable choices using the WRONG radixes (whatever depth each happens to land on in
+// the truncated chain instead of its true depth), corrupting exactly the early/ancestor part of
+// the decoded content while the deeper, freshly-discovered part stays correct by coincidence.
+// A static (not stack-local) scratch array, which would otherwise risk overflowing a FreeRTOS
+// task's stack if declared as a local variable. Matches BABEL_MAX_BLOCKS's sizing rationale -
+// 4096 comfortably covers the website's 3000-character cap (~2700 levels) with margin.
+#define BABEL_MAX_CHAIN_DEPTH 4096
+uint32_t babel_chain_scratch[BABEL_MAX_CHAIN_DEPTH];
+static bool babel_compute_index_for(uint32_t parent_handle) {
+  uint32_t* chain = babel_chain_scratch; // collected leaf-to-root: local choice at each step
+  uint32_t chain_len = 0;
+
+  uint32_t handle = parent_handle;
+  while (handle != 0xFFFFFFFF) {
+    if (chain_len >= BABEL_MAX_CHAIN_DEPTH) {
+      return false; // pathologically deep - refuse rather than silently truncate
+    }
+    babel_block_t* block = babel_find_block(handle);
+    if (!block) {
+      return false; // unresolvable ancestor - do NOT guess, refuse to serve wrong content
+    }
+    chain[chain_len++] = handle - block->start + 1;
+    handle = block->parent_handle;
+  }
+
+  memset(output_file, 0, sizeof(output_file));
+  output_file_len = 0;
+  memset(weight_file, 0, sizeof(weight_file));
+  weight_file[0] = 1;
+  weight_file_len = 1;
+
+  // Replay root-to-leaf: chain[chain_len-1] is the root-level (depth 0) choice. Decorative
+  // levels (depth < BABEL_DECORATIVE_DEPTH) are skipped entirely here - they're always choice 1
+  // out of a branch of 1, carrying zero information, so folding them into the weighted sum would
+  // only ever ADD a constant offset (1 * weight-at-that-depth) without ever advancing the
+  // weight (since multiplying by a branch of 1 leaves weight unchanged) - corrupting the value
+  // for no reason. The first REAL digit (depth == BABEL_DECORATIVE_DEPTH) must see weight == 1,
+  // exactly matching the website's/file-to-path.js's encode, which never touches the index while
+  // emitting the decorative prefix either.
+  for (uint32_t depth = BABEL_DECORATIVE_DEPTH; depth < chain_len; depth++) {
+    fs_append_output(chain[chain_len - 1 - depth], babel_branch_at(depth));
+  }
+  return true;
+}
+
+// Decodes output_file (currently holding "index") into decoded_file (the true file content),
+// via the bijective base-59 decode: while (v>0) { v -= 1; digit = v % 59; v /= 59; emit
+// babel_content_alphabet[digit]; } - the exact inverse of file-to-path.js's/the website's
+// per-character encode. Operates on a scratch copy so output_file/weight_file are left
+// untouched - the user may keep navigating deeper (and read other "file.txt" objects along
+// the way) after this.
+uint8_t babel_decode_scratch[4096];
+static void babel_decode_output_to_file(void) {
+  size_t len = output_file_len;
+  memcpy(babel_decode_scratch, output_file, len);
+  decoded_file_len = 0;
+  while (len > 0) {
+    babel_buf_dec_standard(babel_decode_scratch, &len);
+    uint32_t digit = babel_buf_divmod_scalar(babel_decode_scratch, &len, BABEL_CONTENT_ALPHABET_LENGTH);
+    decoded_file[decoded_file_len++] = (uint8_t) babel_content_alphabet[digit];
+  }
+}
 
 static int32_t fs_open_close_session(tud_mtp_cb_data_t* cb_data) {
   const mtp_container_command_t* command = cb_data->command_container;
@@ -614,28 +1048,20 @@ static int32_t fs_open_close_session(tud_mtp_cb_data_t* cb_data) {
       return MTP_RESP_SESSION_ALREADY_OPEN;
     }
     is_session_opened = true;
-
-    if (!handle_count) {
-      // Calculate total amount of objects in each directory
-      handle_count = 1;
-      for (int i = 0; i < BABEL_MAX_NAME_LENGTH; i++) {
-        handle_count *= BABEL_ALPHABET_LENGTH;
-      }
-      // Add one handle for the sole file in the directory
-      handle_count++;
-    }
-
-    output_file_len = 0;
-    output_file[0] = 0;
-
-    // Upon session open, we regenerate the handle table
-    // fs_handletable_regenerate(&handle_table);
+    // Deliberately NOT resetting the handle table (babel_blocks) or output_file/weight_file
+    // here. Windows can legitimately close and reopen the MTP session mid-browse (not
+    // necessarily implying the user unplugged the device), and if a session reopen wiped the
+    // table while the host still held handles from before it, those stale-but-still-presented
+    // handles would become unresolvable - previously this was silently (and wrongly) treated as
+    // "must be a root-level child", corrupting content. The handle table instead persists for
+    // the device's entire power-on lifetime (it's already correctly zero/one-initialized at
+    // firmware start, needing no explicit reset), so a session reopen can never invalidate a
+    // handle the host is still holding.
   } else { // close session
     if (!is_session_opened) {
       return MTP_RESP_SESSION_NOT_OPEN;
     }
     is_session_opened = false;
-    // handle_self_inc = 0;
   }
   return MTP_RESP_OK;
 }
@@ -705,127 +1131,34 @@ static int32_t fs_get_device_properties(tud_mtp_cb_data_t* cb_data) {
   return 0;
 }
 
-void fs_output_add (uint32_t value) {
-  uint32_t index = 0;
-  uint32_t carry = 0;
-  while (value || carry) {
-    int digit = (value & 0xFF) + output_file[index] + carry;
-    output_file[index] = digit & 0xFF;
-    carry = digit >> 8;
-    value >>= 8;
-    if (++index > output_file_len) {
-      output_file[index] = 0;
-      output_file_len = index;
-    }
+// Transaction-scoped: set by the COMMAND phase below, read back by its own DATA phase
+// continuation calls. Safe to share as plain globals (unlike the old nav_stack) because
+// TinyUSB's MTP driver guarantees a transaction's COMMAND and DATA phases are never
+// interleaved with a different command - see the design note above babel_block_t.
+static uint32_t babel_listing_start = 0;
+static uint32_t babel_listing_branch = 0;
+static uint32_t babel_listing_handle_count = 0;
+
+// TEMPORARY DEBUG INSTRUMENTATION (remove along with babel_append_debug_dump below): records
+// every GetObjectHandles call (both phases) since boot, so we can see exactly what happened for
+// large (multi-packet) listings like Pagina's 411 handles - in particular whether MTP_PHASE_DATA
+// continuation ever runs for it, and whether the handles it writes are the ones we expect.
+#define BABEL_CALL_LOG_CAP 100
+typedef struct {
+  uint32_t phase;          // 0 = command, 1 = data
+  uint32_t parent_or_start; // command: parent_handle given; data: babel_listing_start in effect
+  uint32_t handle_count;
+  uint32_t payload_bytes;
+  uint32_t batch_or_sent;   // command: first_batch written; data: handles_sent so far (before this packet)
+  uint32_t this_packet;     // data only: handles_this_packet; 0 for command entries
+} babel_call_log_entry_t;
+babel_call_log_entry_t babel_call_log[BABEL_CALL_LOG_CAP];
+uint32_t babel_call_log_len = 0;
+static void babel_call_log_push(uint32_t phase, uint32_t a, uint32_t handle_count, uint32_t payload_bytes, uint32_t b, uint32_t c) {
+  if (babel_call_log_len < BABEL_CALL_LOG_CAP) {
+    babel_call_log[babel_call_log_len++] = (babel_call_log_entry_t){phase, a, handle_count, payload_bytes, b, c};
   }
 }
-
-void fs_output_multiply (uint32_t value) {
-  uint32_t index = 0;
-  uint32_t carry = 0;
-  while (index < output_file_len || carry) {
-    uint32_t digit = output_file[index] * value + carry;
-    output_file[index] = digit & 0xFF;
-    carry = digit >> 8;
-    if (++index > output_file_len) {
-      output_file[index] = 0;
-      output_file_len = index;
-    }
-  }
-}
-
-void fs_output_bytes_dec () {
-  for (int i = 0; i < output_file_len - 1; i ++) {
-    int j = i;
-    while (1) {
-      if (output_file[j] == 0) {
-        output_file[j] = 255;
-      } else {
-        output_file[j] --;
-        break;
-      }
-      j ++;
-    }
-  }
-  if (output_file[output_file_len - 1] == 0) {
-    output_file_len --;
-  } else {
-    output_file[output_file_len - 1] --;
-  }
-}
-
-void fs_output_bytes_inc () {
-  for (int i = 0; i < output_file_len; i ++) {
-    int j = i;
-    while (1) {
-      if (output_file[j] == 255) {
-        output_file[j] = 0;
-      } else {
-        output_file[j] ++;
-        break;
-      }
-      if (++j > output_file_len) {
-        output_file[j] = 0;
-        output_file_len = j;
-      }
-    }
-  }
-}
-
-void fs_append_output (uint32_t handle) {
-
-  // Increment every byte of the output file buffer
-  /**
-   * This converts the arbitrary byte buffer to a valid base-256 number
-   * without any leading zeroes, so that it can be operated on with basic
-   * arithmetic. Then, once we're done, we decrement every byte to convert
-   * it back to a byte buffer that supports leading null bytes.
-   */
-  fs_output_bytes_inc();
-
-  // Shift buffer up by amount of possible combinations (base)
-  fs_output_multiply(handle_count - 1);
-
-  // Add current handle to least significant end of buffer
-  fs_output_add(handle);
-
-  // Decrement every byte of the output file buffer, undoing the first operation
-  fs_output_bytes_dec();
-
-}
-
-// void fs_reverse_output (uint32_t handle) {
-
-//   // Subtract handle from buffer
-//   uint32_t index = 0;
-//   uint32_t carry = 0;
-//   while (handle || carry) {
-//     int value = output_file[index] - (handle & 0xFF) - carry;
-//     output_file[index] = value < 0 ? 256 + value : value;
-//     carry = value < 0;
-//     handle >>= 8;
-//     if (++index > output_file_len) {
-//       output_file[index] = 0;
-//       output_file_len = index;
-//     }
-//   }
-
-//   // Divide buffer by alphabet length
-//   // This should be a clean division with no remainder
-//   index = output_file_len;
-//   carry = 0;
-//   while (index-- > 0) {
-//     uint32_t value = output_file[index] + carry * 256;
-//     output_file[index] = value / BABEL_ALPHABET_LENGTH;
-//     carry = value % BABEL_ALPHABET_LENGTH;
-//   }
-
-//   // Trim leading zero bytes
-//   while (output_file_len > 0 && output_file[output_file_len - 1] == 0) {
-//     output_file_len--;
-//   }
-
-// }
 
 static int32_t fs_get_object_handles(tud_mtp_cb_data_t* cb_data) {
   // `ls /<folder_in_question>`
@@ -842,21 +1175,10 @@ static int32_t fs_get_object_handles(tud_mtp_cb_data_t* cb_data) {
   }
 
   if (cb_data->phase == MTP_PHASE_COMMAND) {
-
-    if (parent_handle != 0xFFFFFFFF) {
-      if (prev_parent_handle != parent_handle) {
-        fs_append_output((parent_handle - 1) % handle_count + 1);
-        prev_parent_handle = parent_handle;
-        path_depth++;
-      }
-      // snprintf(babel_log + strlen(babel_log), sizeof(babel_log), "get_obj_handles %lu\n", parent_handle);
-    } else {
-      // snprintf(babel_log + strlen(babel_log), sizeof(babel_log), "get_obj_handles 0\n");
-      output_file_len = 0;
-      output_file[0] = 0;
-      prev_parent_handle = 0;
-      path_depth = 0;
+    if (!babel_list_children(parent_handle, &babel_listing_start, &babel_listing_branch, &babel_listing_handle_count)) {
+      return MTP_RESP_INVALID_OBJECT_HANDLE;
     }
+    const uint32_t handle_count = babel_listing_handle_count;
 
     // Payload space in the first packet (after the 12-byte container header)
     const uint32_t first_payload_bytes = io_container->payload_bytes;
@@ -869,14 +1191,17 @@ static int32_t fs_get_object_handles(tud_mtp_cb_data_t* cb_data) {
     // Fill the remaining space in the first packet with as many handles as fit
     const uint32_t first_batch = tu_min32(handle_count, (first_payload_bytes - 4) / 4);
     for (uint32_t i = 0; i < first_batch; i++) {
-      *p++ = i + 1 + path_depth * handle_count;
+      *p++ = babel_listing_start + i;
     }
+
+    babel_call_log_push(0, parent_handle, handle_count, first_payload_bytes, first_batch, 0);
 
     // Declare length of full buffer to be streamed
     io_container->header->len += handle_count * 4;
 
     tud_mtp_data_send(io_container);
   } else { // MTP_PHASE_DATA
+    const uint32_t handle_count = babel_listing_handle_count;
     const uint32_t data_sent = cb_data->total_xferred_bytes - sizeof(mtp_container_header_t);
     const uint32_t handles_sent = (data_sent - 4) / 4; // how many handles already sent
     const uint32_t handles_remaining = handle_count - handles_sent;
@@ -884,8 +1209,10 @@ static int32_t fs_get_object_handles(tud_mtp_cb_data_t* cb_data) {
 
     uint32_t* p = (uint32_t*) io_container->payload;
     for (uint32_t i = 0; i < handles_this_packet; i++) {
-      p[i] = handles_sent + i + 1 + path_depth * handle_count;
+      p[i] = babel_listing_start + handles_sent + i;
     }
+
+    babel_call_log_push(1, babel_listing_start, handle_count, io_container->payload_bytes, handles_sent, handles_this_packet);
 
     tud_mtp_data_send(io_container);
   }
@@ -893,41 +1220,82 @@ static int32_t fs_get_object_handles(tud_mtp_cb_data_t* cb_data) {
   return 0;
 }
 
-uint16_t babel_file_name[] = {'f','i','l','e',0};
-uint16_t babel_dir_name[BABEL_MAX_NAME_LENGTH + 1] = {0};
+uint16_t babel_file_name[] = {'f','i','l','e','.','t','x','t',0};
+#define BABEL_FILE_NAME_LENGTH 8
+
+// Returns the display name for local_index (0-based) at the given depth, writing into
+// babel_name_buf when it's a subdirectory. *out_len excludes the null terminator. Depends only
+// on (depth, local_index, branch) - never on navigation history - so GetObjectInfo can call
+// this for ANY handle at ANY time and always get the correct name.
+static uint16_t* babel_entry_name(uint32_t depth, uint32_t local_index, uint32_t branch, int* out_len) {
+  if (local_index == branch) {
+    *out_len = BABEL_FILE_NAME_LENGTH;
+    return babel_file_name;
+  }
+  *out_len = babel_name_at(depth, local_index);
+  return babel_name_buf;
+}
+
+// TEMPORARY DEBUG INSTRUMENTATION (remove along with babel_append_debug_dump): a RUN-LENGTH-
+// COMPRESSED log of GetObjectInfo calls - one entry per consecutive run of calls at the SAME
+// depth, recording the range of local_choice values and handles seen, rather than one entry per
+// call. A flat log (one entry per call) got completely flooded by a single large (100-item)
+// folder's full-enumeration before a user ever reaches the level we actually need to see
+// (Explorer queries EVERY item in a folder to populate the view, not just the one being
+// navigated to) - compressing same-depth runs into one line each lets this cover MANY more
+// distinct levels in the same space. This exists to answer: when Windows later uses a handle
+// that doesn't match the name the user actually typed/pasted, did WE send back the wrong name
+// for that handle in the first place, or did we correctly advertise it and Windows itself picked
+// the wrong one?
+#define BABEL_INFO_LOG_CAP 40
+typedef struct {
+  uint32_t depth;
+  uint32_t first_handle, last_handle;
+  uint32_t first_lc, last_lc;
+  uint32_t run_count;
+} babel_info_run_t;
+babel_info_run_t babel_info_log[BABEL_INFO_LOG_CAP];
+uint32_t babel_info_log_len = 0;
+static void babel_info_log_note(uint32_t handle, uint32_t depth, uint32_t local_choice) {
+  if (babel_info_log_len > 0) {
+    babel_info_run_t* last = &babel_info_log[babel_info_log_len - 1];
+    if (last->depth == depth) {
+      last->last_handle = handle;
+      last->last_lc = local_choice;
+      last->run_count++;
+      return;
+    }
+  }
+  babel_info_run_t new_run = { depth, handle, handle, local_choice, local_choice, 1 };
+  if (babel_info_log_len < BABEL_INFO_LOG_CAP) {
+    babel_info_log[babel_info_log_len++] = new_run;
+  } else {
+    // full: drop the oldest run to make room for this new one (shift-left eviction)
+    for (uint32_t i = 1; i < BABEL_INFO_LOG_CAP; i++) babel_info_log[i - 1] = babel_info_log[i];
+    babel_info_log[BABEL_INFO_LOG_CAP - 1] = new_run;
+  }
+}
 
 static int32_t fs_get_object_info(tud_mtp_cb_data_t* cb_data) {
   // `ls -l /<file_in_question>`
   const mtp_container_command_t* command = cb_data->command_container;
   mtp_container_info_t* io_container = &cb_data->io_container;
-  const uint32_t obj_handle = (command->params[0] - 1) % handle_count + 1;
-  // struct stat stat_buf;
-  // fs_handletable_entry_t *entry = NULL;
-  // int retval = fs_stat_handle(&handle_table, obj_handle, &stat_buf, &entry);
-  // if (retval != 0) {
-  //   ESP_LOGE("MtpImpl", "Failed to stat handle %d: returned %d", obj_handle, retval);
-  //   return MTP_RESP_INVALID_OBJECT_HANDLE;
-  // }
+  const uint32_t obj_handle = command->params[0];
 
-  // if (obj_handle == handle_count) {
-    // snprintf(babel_log + strlen(babel_log), sizeof(babel_log), "get_obj_info\n");
-  // }
-
-  uint16_t *entry_name_ptr = babel_file_name;
-  bool entry_is_dir = obj_handle != handle_count;
-
-  if (entry_is_dir) {
-    uint32_t index = obj_handle - 1;
-    for (int i = BABEL_MAX_NAME_LENGTH - 1; i >= 0; i --) {
-      babel_dir_name[i] = alphabet[index % BABEL_ALPHABET_LENGTH];
-      index /= BABEL_ALPHABET_LENGTH;
-    }
-    entry_name_ptr = babel_dir_name;
+  // Fully stateless: the name of ANY handle depends only on its own handle-table entry, never
+  // on whatever we last navigated to. This is what makes it safe for the host to ask about
+  // handles in any order (cached, revisited, interleaved with other folders, etc.).
+  uint32_t depth, local_choice, branch;
+  if (!babel_resolve_handle(obj_handle, &depth, &local_choice, &branch)) {
+    return MTP_RESP_INVALID_OBJECT_HANDLE;
   }
+  babel_info_log_note(obj_handle, depth, local_choice);
+  const uint32_t local_index = local_choice - 1; // 0-based
 
-  // uint16_t utf16_filename[MTP_FILENAME_LENGTH];
-  // size_t write_count = utf8_to_utf16((uint8_t *)entry_name_ptr, strlen(entry_name_ptr), utf16_filename, MTP_FILENAME_LENGTH);
-  // utf16_filename[TU_MIN(write_count, MTP_FILENAME_LENGTH)] = 0;
+  bool entry_is_dir = local_index != branch;
+  int entry_name_len;
+  uint16_t* entry_name_ptr = babel_entry_name(depth, local_index, branch, &entry_name_len);
+  (void) entry_name_len; // mtp_container_add_string recomputes the length itself
 
   mtp_object_info_header_t obj_info_header = {
       .storage_id = SUPPORTED_STORAGE_ID,
@@ -956,13 +1324,109 @@ static int32_t fs_get_object_info(tud_mtp_cb_data_t* cb_data) {
   return 0;
 }
 
+// ============================================================================
+// TEMPORARY DEBUG INSTRUMENTATION (remove once the content-corruption bug is found).
+// Appends a full diagnostic dump - every block currently in the handle table, the exact
+// ancestor chain walked for THIS specific read, and the raw pre-decode index bytes - after the
+// real file content, so it's visible just by opening file.txt normally (no serial/debugger
+// needed). Never fails the read even if the chain can't be resolved: always serves whatever
+// content is available (possibly empty) PLUS the dump, since the failure case itself is exactly
+// what we want to see.
+// ============================================================================
+// Bounds-safe append: snprintf's return value is how many bytes WOULD be written if the buffer
+// were big enough, which can exceed the space actually available if truncated - blindly adding
+// that to *pos would wrap *pos past the buffer end (size_t is unsigned), making the NEXT call's
+// "remaining space" calculation underflow to a huge number and write out of bounds for real.
+// This clamps to what was actually room for, so repeated truncated calls stay harmless.
+static void babel_dbg_append(size_t* pos, const char* fmt, ...) {
+  if (*pos >= sizeof(decoded_file) - 1) return; // no room left at all, stop
+  size_t remaining = sizeof(decoded_file) - *pos;
+  va_list args;
+  va_start(args, fmt);
+  int n = vsnprintf((char*)decoded_file + *pos, remaining, fmt, args);
+  va_end(args);
+  if (n <= 0) return;
+  size_t written = ((size_t)n < remaining) ? (size_t)n : remaining - 1; // vsnprintf always NUL-terminates within `remaining`
+  *pos += written;
+}
+
+#define BABEL_DEBUG_BUF_SIZE 3500
+static void babel_append_debug_dump(uint32_t obj_handle) {
+  size_t pos = decoded_file_len;
+
+  babel_dbg_append(&pos,
+    "\r\n\r\n=== BABEL DEBUG DUMP ===\r\n"
+    "obj_handle=%lu\r\n"
+    "babel_blocks_len=%lu babel_next_handle=%lu\r\n",
+    (unsigned long)obj_handle, (unsigned long)babel_blocks_len, (unsigned long)babel_next_handle);
+
+  babel_dbg_append(&pos, "--- chain for this read ---\r\n");
+
+  babel_block_t* fblock = babel_find_block(obj_handle);
+  if (!fblock) {
+    babel_dbg_append(&pos, "obj_handle NOT FOUND in table!\r\n");
+  } else {
+    babel_dbg_append(&pos, "file's own block: p=%lu d=%lu s=%lu c=%lu\r\n",
+      (unsigned long)fblock->parent_handle, (unsigned long)fblock->depth,
+      (unsigned long)fblock->start, (unsigned long)fblock->count);
+
+    uint32_t handle = fblock->parent_handle;
+    while (handle != 0xFFFFFFFF && pos + 90 < BABEL_DEBUG_BUF_SIZE) {
+      babel_block_t* b = babel_find_block(handle);
+      if (!b) {
+        babel_dbg_append(&pos, "handle=%lu UNRESOLVABLE - chain stops here\r\n", (unsigned long)handle);
+        break;
+      }
+      uint32_t local_choice = handle - b->start + 1;
+      babel_dbg_append(&pos, "handle=%lu local_choice=%lu (block: p=%lu d=%lu s=%lu c=%lu)\r\n",
+        (unsigned long)handle, (unsigned long)local_choice,
+        (unsigned long)b->parent_handle, (unsigned long)b->depth,
+        (unsigned long)b->start, (unsigned long)b->count);
+      handle = b->parent_handle;
+    }
+  }
+
+  babel_dbg_append(&pos, "--- output_file (index bytes, little-endian hex, len=%lu) ---\r\n",
+    (unsigned long)output_file_len);
+  for (size_t i = 0; i < output_file_len && pos + 4 < BABEL_DEBUG_BUF_SIZE; i++) {
+    babel_dbg_append(&pos, "%02X ", output_file[i]);
+  }
+
+  babel_dbg_append(&pos, "\r\n--- GetObjectHandles call log (phase parent/start count payload batch/sent this_pkt) ---\r\n");
+  for (uint32_t i = 0; i < babel_call_log_len && pos + 70 < BABEL_DEBUG_BUF_SIZE; i++) {
+    babel_call_log_entry_t* e = &babel_call_log[i];
+    babel_dbg_append(&pos, "%s pa/st=%lu cnt=%lu pb=%lu b/s=%lu pkt=%lu\r\n",
+      e->phase == 0 ? "CMD " : "DATA",
+      (unsigned long)e->parent_or_start, (unsigned long)e->handle_count,
+      (unsigned long)e->payload_bytes, (unsigned long)e->batch_or_sent, (unsigned long)e->this_packet);
+  }
+  babel_dbg_append(&pos, "(call log entries: %lu of %lu capacity)\r\n",
+    (unsigned long)babel_call_log_len, (unsigned long)BABEL_CALL_LOG_CAP);
+
+  // Oldest-to-newest, already in array order (eviction shifts left, so index 0 is always the
+  // oldest surviving run). Each line is one consecutive run of GetObjectInfo calls at the same
+  // depth - e.g. "d=10 h=943..1043 lc=1..101 x101" means 101 calls covering the whole listing.
+  babel_dbg_append(&pos, "\r\n--- GetObjectInfo runs, oldest to newest (depth handle-range local_choice-range xcount) ---\r\n");
+  for (uint32_t i = 0; i < babel_info_log_len && pos + 50 < BABEL_DEBUG_BUF_SIZE; i++) {
+    babel_info_run_t* r = &babel_info_log[i];
+    babel_dbg_append(&pos, "d=%lu h=%lu..%lu lc=%lu..%lu x%lu\r\n",
+      (unsigned long)r->depth, (unsigned long)r->first_handle, (unsigned long)r->last_handle,
+      (unsigned long)r->first_lc, (unsigned long)r->last_lc, (unsigned long)r->run_count);
+  }
+  babel_dbg_append(&pos, "(runs shown: %lu of %lu cap, oldest runs may have been evicted)\r\n",
+    (unsigned long)babel_info_log_len, (unsigned long)BABEL_INFO_LOG_CAP);
+
+  babel_dbg_append(&pos, "\r\n=== END DEBUG DUMP ===\r\n");
+
+  decoded_file_len = pos;
+}
+
 static int32_t fs_get_object(tud_mtp_cb_data_t* cb_data) {
   const mtp_container_command_t* command = cb_data->command_container;
   mtp_container_info_t* io_container = &cb_data->io_container;
   const uint32_t obj_handle = command->params[0];
 
   if (cb_data->phase == MTP_PHASE_COMMAND) {
-    // snprintf(babel_log + strlen(babel_log), sizeof(babel_log), "get_obj %lu\n", obj_handle);
     // If file contents is larger than CFG_TUD_MTP_EP_BUFSIZE, data may only partially is added here
     // the rest will be sent in tud_mtp_data_more_cb
     // Rants: TinyUSB MTP design is slightly annoying, it assumed your entire file to transfer is
@@ -975,25 +1439,35 @@ static int32_t fs_get_object(tud_mtp_cb_data_t* cb_data) {
     // something back, we need to send metadata back, so if we read a whole packet it's definitely
     // not gonna fit in the MTP packet's remaining space if our file is larger than the free space,
     // and when the file's smaller than that we're totally fine then.
-    // fs_append_output(obj_handle - 1);
-    size_t file_size = output_file_len;
+    // Recompute output_file fresh from the handle table (obj_handle's own parent chain) before
+    // reading - a pure function of obj_handle, with no dependency on whatever has happened on
+    // other handles in between (background content indexing elsewhere in the tree, etc.).
+    babel_block_t* block = babel_find_block(obj_handle);
+    // TEMPORARY (debug period): never bail out with an error - always decode what we can (empty
+    // if the chain can't be resolved) and append the diagnostic dump, so the user always gets a
+    // readable file.txt back instead of Explorer just showing a read error.
+    decoded_file_len = 0;
+    if (block && babel_compute_index_for(block->parent_handle)) {
+      // output_file holds the running "index" (per the bijective big-number scheme), not the
+      // final bytes directly - decode it into decoded_file now. This is non-destructive (works
+      // off a scratch copy), so output_file/weight_file stay intact in case the user keeps
+      // navigating deeper and reads another file.txt further down this same path.
+      babel_decode_output_to_file();
+    }
+    babel_append_debug_dump(obj_handle);
+    size_t file_size = decoded_file_len;
     // Pass file_size (not first_chunk) so add_raw records the full transfer length in header->len,
     // even though it only copies min(file_size, remaining_buf) bytes into the packet buffer.
-    uint32_t bytes_queued = mtp_container_add_raw(io_container, output_file, file_size);
-    // if (bytes_queued >= output_file_len) {
-    //   fs_reverse_output(obj_handle - 1);
-    // }
+    uint32_t bytes_queued = mtp_container_add_raw(io_container, decoded_file, file_size);
+    (void) bytes_queued;
     tud_mtp_data_send(io_container);
   } else if (cb_data->phase == MTP_PHASE_DATA) {
     // continue sending remaining data: file contents offset is xferred byte minus header size
     const uint32_t offset = cb_data->total_xferred_bytes - sizeof(mtp_container_header_t);
-    const uint32_t xact_len = tu_min32(output_file_len - offset, io_container->payload_bytes);
+    const uint32_t xact_len = tu_min32(decoded_file_len - offset, io_container->payload_bytes);
     uint8_t *write_ptr = io_container->payload;
-    memcpy(write_ptr, output_file + offset, xact_len);
+    memcpy(write_ptr, decoded_file + offset, xact_len);
     tud_mtp_data_send(io_container);
-    // if (offset + xact_len >= output_file_len) {
-    //   fs_reverse_output(obj_handle - 1);
-    // }
   }
 
   return 0;
