@@ -590,7 +590,7 @@ static int32_t fs_get_device_info(tud_mtp_cb_data_t* cb_data) {
 }
 
 // Mirrors Jorge Luis Borges' "La biblioteca de Babel" as NARRATIVE FLAVOR: the first six levels
-// you walk through are always named Hexagono, Pared, Estante, Libro, Pagina, Linea, in that
+// you walk through are always named Hexagono, Pared, Estante, Libro, Pagina, Renglon, in that
 // order, with Borges' own counts at each (47 hexagons, 4 walls, 5 shelves, 32 books, 410 pages,
 // 40 lines) - but they don't encode anything. babel_compute_index_for skips depths below
 // BABEL_DECORATIVE_DEPTH entirely when accumulating the content index, so ANY combination of
@@ -601,51 +601,52 @@ static int32_t fs_get_device_info(tud_mtp_cb_data_t* cb_data) {
 // isn't offered until the real, numbered levels begin.
 //
 // The actual message is encoded entirely in the folders AFTER that decorative intro, which are
-// all UNIFORM: plain-numbered folders ("1" to BABEL_CARACTER_COUNT), repeating as many times as
-// needed - no per-level special-casing, and only ONE listing width to ever worry about for the
-// part that actually matters. This MUST stay in lockstep with docs/index.html and file-to-path.js.
+// all UNIFORM: plain zero-padded numbered folders ("01" to BABEL_CARACTER_COUNT), repeating as
+// many times as needed - no per-level special-casing, and only ONE listing width to ever worry
+// about for the part that actually matters. This MUST stay in lockstep with docs/index.html and
+// file-to-path.js.
 #define BABEL_DECORATIVE_DEPTH 6
 static const char* babel_decorative_names[BABEL_DECORATIVE_DEPTH] = {
-  "Hexagono", "Pared", "Estante", "Libro", "Pagina", "Linea"
+  "Hexagono", "Pared", "Estante", "Libro", "Pagina", "Renglon"
 };
 static const uint32_t babel_decorative_counts[BABEL_DECORATIVE_DEPTH] = {
   47, 4, 5, 32, 410, 40
 };
-// Real (post-decorative) levels are named "Letra-N" ("Letra" = letter) - the natural next step
-// after Linea in Borges' own structure: a line is made of letters. Kept deliberately narrow (20,
-// not a wide round number like 100) partly so Windows Explorer finishes enumerating a level
-// quickly, and critically, NUMBERS ARE ZERO-PADDED (see babel_digit_width) so Explorer's default
-// lexicographic sort matches numeric order - debug captures showed a human navigating a long,
-// un-padded, alphabetically-sorted list of plain numbers could easily end up clicking an
-// adjacent-but-wrong one (e.g. "17" sorts nowhere near "9" without padding).
+// Real (post-decorative) levels are plain zero-padded numbers "01".."20" (see babel_digit_width).
+// Two different arrow-glyph naming schemes were tried here (8 single-direction arrows, then 16
+// single+double-direction arrows) and BOTH corrupted content when navigating generated paths on
+// real hardware, while this plain 20-radix numeric scheme has been repeatedly confirmed to work.
+// An 8-radix PLAIN DIGIT scheme also corrupted, so the common factor isn't "arrows" specifically -
+// it's most likely the LOWER per-level option count itself (fewer options -> more levels needed
+// per message AND denser folder-name repetition throughout the tree), which may be exposing some
+// host-side (Windows WPD/MTP) path-resolution quirk when parsing long pasted paths with many
+// identically-named siblings - but this was never fully isolated (a 16-radix PLAIN DIGIT scheme
+// was never tested). Do not drop this below 20 without a real multi-level hardware test first.
+// MUST stay in lockstep with docs/index.html and file-to-path.js.
 #define BABEL_CARACTER_COUNT    20
 
 // Separate, much smaller alphabet for the DECODED FILE CONTENT (what ends up inside file.txt) -
-// plain letters (both cases preserved), digits, space, basic punctuation, and the accented
-// Spanish/French letters needed to write real words in either language without folding them
-// away. Each entry is a UTF-8 byte STRING (not a single `char`) because accented letters need 2
-// bytes in UTF-8, unlike plain ASCII which needs 1 - babel_decode_output_to_file below copies
-// however many bytes each entry actually has, rather than assuming exactly 1 per digit. Written
-// as explicit "\xC3\x89"-style byte escapes (not literal UTF-8 characters in the source) so this
-// doesn't depend on the compiler correctly guessing the source file's encoding. MUST stay in
-// lockstep with docs/index.html and file-to-path.js.
-#define BABEL_CONTENT_ALPHABET_LENGTH 117
+// lowercase-only letters (no uppercase at all - closer to Borges' own story, where the library's
+// language uses a fixed, small set of "orthographic symbols", and incidentally also shortens the
+// arrow-folder path needed per character, since fewer symbols means a smaller radix to encode
+// against), digits, space, minimal punctuation (just "." and ",", same reasoning), and the
+// accented Spanish/French letters needed to write real words in either language without folding
+// them away. Any uppercase typed by the user is folded to lowercase before encoding (see
+// sanitizeContentText in docs/index.html / file-to-path.js) rather than dropped, so no letters of
+// the message are lost. Each entry is a UTF-8 byte STRING (not a single `char`) because accented
+// letters need 2 bytes in UTF-8, unlike plain ASCII which needs 1 - babel_decode_output_to_file
+// below copies however many bytes each entry actually has, rather than assuming exactly 1 per
+// digit. Written as explicit "\xC3\x89"-style byte escapes (not literal UTF-8 characters in the
+// source) so this doesn't depend on the compiler correctly guessing the source file's encoding.
+// MUST stay in lockstep with docs/index.html and file-to-path.js.
+#define BABEL_CONTENT_ALPHABET_LENGTH 63
 const char* babel_content_alphabet[BABEL_CONTENT_ALPHABET_LENGTH] = {
   " ",
-  "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M",
-  "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z",
   "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m",
   "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z",
   "0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
-  ".", ",", "!", "?", "'", "-",
-  // Uppercase accented: A A A A A | E E E E | I I I I | O O O O O | U U U U | N C
-  "\xC3\x81", "\xC3\x80", "\xC3\x82", "\xC3\x84", "\xC3\x83", // Á À Â Ä Ã
-  "\xC3\x89", "\xC3\x88", "\xC3\x8A", "\xC3\x8B",             // É È Ê Ë
-  "\xC3\x8D", "\xC3\x8C", "\xC3\x8E", "\xC3\x8F",             // Í Ì Î Ï
-  "\xC3\x93", "\xC3\x92", "\xC3\x94", "\xC3\x96", "\xC3\x95", // Ó Ò Ô Ö Õ
-  "\xC3\x9A", "\xC3\x99", "\xC3\x9B", "\xC3\x9C",             // Ú Ù Û Ü
-  "\xC3\x91", "\xC3\x87",                                     // Ñ Ç
-  // Lowercase accented, same order
+  ".", ",",
+  // Lowercase accented: a a a a a | e e e e | i i i i | o o o o o | u u u u | n c
   "\xC3\xA1", "\xC3\xA0", "\xC3\xA2", "\xC3\xA4", "\xC3\xA3", // á à â ä ã
   "\xC3\xA9", "\xC3\xA8", "\xC3\xAA", "\xC3\xAB",             // é è ê ë
   "\xC3\xAD", "\xC3\xAC", "\xC3\xAE", "\xC3\xAF",             // í ì î ï
@@ -1030,13 +1031,12 @@ static bool babel_compute_index_for(uint32_t parent_handle) {
   weight_file_len = 1;
 
   // Replay root-to-leaf: chain[chain_len-1] is the root-level (depth 0) choice. Decorative
-  // levels (depth < BABEL_DECORATIVE_DEPTH) are skipped entirely here - they're always choice 1
-  // out of a branch of 1, carrying zero information, so folding them into the weighted sum would
-  // only ever ADD a constant offset (1 * weight-at-that-depth) without ever advancing the
-  // weight (since multiplying by a branch of 1 leaves weight unchanged) - corrupting the value
-  // for no reason. The first REAL digit (depth == BABEL_DECORATIVE_DEPTH) must see weight == 1,
-  // exactly matching the website's/file-to-path.js's encode, which never touches the index while
-  // emitting the decorative prefix either.
+  // levels (depth < BABEL_DECORATIVE_DEPTH) are skipped entirely here since they're excluded
+  // from the weighted sum by construction (the loop below starts at BABEL_DECORATIVE_DEPTH),
+  // regardless of their own branch sizes - they carry zero information either way. The first
+  // REAL digit (depth == BABEL_DECORATIVE_DEPTH) must see weight == 1, exactly matching the
+  // website's/file-to-path.js's encode, which never touches the index while emitting the
+  // decorative prefix either.
   for (uint32_t depth = BABEL_DECORATIVE_DEPTH; depth < chain_len; depth++) {
     fs_append_output(chain[chain_len - 1 - depth], babel_branch_at(depth));
   }
