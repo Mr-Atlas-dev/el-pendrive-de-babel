@@ -601,9 +601,8 @@ static int32_t fs_get_device_info(tud_mtp_cb_data_t* cb_data) {
 // isn't offered until the real, numbered levels begin.
 //
 // The actual message is encoded entirely in the folders AFTER that decorative intro, which are
-// all UNIFORM: plain zero-padded numbered folders ("01" to BABEL_CARACTER_COUNT), repeating as
-// many times as needed - no per-level special-casing, and only ONE listing width to ever worry
-// about for the part that actually matters. This MUST stay in lockstep with docs/index.html and
+// all UNIFORM: a leading space plus a direction arrow (e.g. " ↑", see babel_arrow_glyphs below),
+// repeating as many times as needed. This MUST stay in lockstep with docs/index.html and
 // file-to-path.js.
 #define BABEL_DECORATIVE_DEPTH 6
 static const char* babel_decorative_names[BABEL_DECORATIVE_DEPTH] = {
@@ -612,18 +611,16 @@ static const char* babel_decorative_names[BABEL_DECORATIVE_DEPTH] = {
 static const uint32_t babel_decorative_counts[BABEL_DECORATIVE_DEPTH] = {
   47, 4, 5, 32, 410, 40
 };
-// Real (post-decorative) levels are plain zero-padded numbers "01".."20" (see babel_digit_width).
-// Two different arrow-glyph naming schemes were tried here (8 single-direction arrows, then 16
-// single+double-direction arrows) and BOTH corrupted content when navigating generated paths on
-// real hardware, while this plain 20-radix numeric scheme has been repeatedly confirmed to work.
-// An 8-radix PLAIN DIGIT scheme also corrupted, so the common factor isn't "arrows" specifically -
-// it's most likely the LOWER per-level option count itself (fewer options -> more levels needed
-// per message AND denser folder-name repetition throughout the tree), which may be exposing some
-// host-side (Windows WPD/MTP) path-resolution quirk when parsing long pasted paths with many
-// identically-named siblings - but this was never fully isolated (a 16-radix PLAIN DIGIT scheme
-// was never tested). Do not drop this below 20 without a real multi-level hardware test first.
-// MUST stay in lockstep with docs/index.html and file-to-path.js.
-#define BABEL_CARACTER_COUNT    20
+// Real (post-decorative) levels are named " ↑".." ↘" - a leading space PLUS a compass arrow, no
+// number at all, giving a pure maze/direction theme. History: an UNPADDED 8-radix scheme using a
+// BARE SINGLE-CHARACTER name (either a plain digit "1".."8" or a single compass arrow alone)
+// corrupted content when navigating generated paths on real hardware, as did a 16-radix
+// single-arrow-character scheme and a 20-radix bare-arrow scheme was never tried. Any 2+ character
+// name (a zero-padded 2-digit number alone, or a number+space+arrow) fixed it reliably - this
+// confirms the leading space is pulling its weight here: without it, " ↑" would collapse back to
+// the single bare arrow character that's known to corrupt. MUST stay in lockstep with
+// docs/index.html and file-to-path.js.
+#define BABEL_CARACTER_COUNT    8
 
 // Separate, much smaller alphabet for the DECODED FILE CONTENT (what ends up inside file.txt) -
 // lowercase-only letters (no uppercase at all - closer to Borges' own story, where the library's
@@ -718,16 +715,34 @@ static int babel_write_prefixed_number(const char* prefix, uint32_t number, int 
   return n;
 }
 
+// One compass direction per real-level option, each a single UTF-16 code unit (within the BMP
+// "Arrows" block, well below the surrogate-pair range) - appended after a leading space, e.g.
+// " ↑". Order here MUST exactly match the ARROW_GLYPHS array in docs/index.html and
+// file-to-path.js.
+static const uint16_t babel_arrow_glyphs[BABEL_CARACTER_COUNT] = {
+  0x2191, // ↑ up
+  0x2193, // ↓ down
+  0x2190, // ← left
+  0x2192, // → right
+  0x2196, // ↖ up-left
+  0x2197, // ↗ up-right
+  0x2199, // ↙ down-left
+  0x2198  // ↘ down-right
+};
+
 // Writes the display name for local_index (0-based, < babel_branch_at(depth)) into
 // babel_name_buf. Returns the number of UTF-16 units written (excluding the null).
 static int babel_name_at(uint32_t depth, uint32_t local_index) {
-  int width = babel_digit_width(babel_branch_at(depth));
   if (depth < BABEL_DECORATIVE_DEPTH) {
+    int width = babel_digit_width(babel_branch_at(depth));
     char prefix[16];
     snprintf(prefix, sizeof(prefix), "%s-", babel_decorative_names[depth]);
     return babel_write_prefixed_number(prefix, local_index + 1, width);
   }
-  return babel_write_prefixed_number("", local_index + 1, width);
+  babel_name_buf[0] = (uint16_t)' ';
+  babel_name_buf[1] = babel_arrow_glyphs[local_index];
+  babel_name_buf[2] = 0;
+  return 2;
 }
 
 // output_file accumulates, as you descend, the "index" (per the same bijective big-number

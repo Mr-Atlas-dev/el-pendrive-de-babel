@@ -7,12 +7,14 @@ const Bun = require("bun");
 // reconstructing the message), so ANY number at each of those levels leads to the exact same
 // file.txt. A random one is picked each time purely so it feels like wandering into a genuine,
 // differently-numbered corner of the library. The actual message is encoded entirely in the
-// folders AFTER that decorative intro, which are all UNIFORM: plain zero-padded numbered folders
-// ("01" to CARACTER_COUNT), repeating as many times as needed. Two arrow-glyph naming schemes (8,
-// then 16 single/double-direction arrows) both corrupted content on real hardware; this plain
-// 20-radix numeric scheme is the only one confirmed to work reliably - do not drop CARACTER_COUNT
-// below 20 without a real multi-level hardware test first. MUST stay in lockstep with
-// docs/index.html and the firmware's babel_content_alphabet (src/monolith/usb_mtp_impl.c.h).
+// folders AFTER that decorative intro, which are all UNIFORM: a leading space plus a direction
+// arrow (e.g. " ↑"), no number at all, repeating as many times as needed. History: an unpadded
+// 8-radix scheme using a BARE single-character name (plain digit or a lone arrow, no space/number)
+// corrupted content when navigating generated paths on real hardware; any 2+ character name (a
+// zero-padded number alone, or a number+space+arrow) fixed it reliably - the leading space here is
+// what keeps " ↑" from collapsing back to the single bare arrow character known to corrupt. MUST
+// stay in lockstep with docs/index.html and the firmware's babel_arrow_glyphs
+// (src/monolith/usb_mtp_impl.c.h).
 const DECORATIVE_LEVELS = [
   { name: "Hexagono", count: 47 },
   { name: "Pared",    count: 4 },
@@ -21,7 +23,9 @@ const DECORATIVE_LEVELS = [
   { name: "Pagina",   count: 410 },
   { name: "Renglon",  count: 40 }
 ];
-const CARACTER_COUNT = 20; // how many zero-padded-numbered folders per real (post-decorative) level
+// Order here MUST exactly match babel_arrow_glyphs in src/monolith/usb_mtp_impl.c.h.
+const ARROW_GLYPHS = ["↑", "↓", "←", "→", "↖", "↗", "↙", "↘"];
+const CARACTER_COUNT = ARROW_GLYPHS.length; // how many folders per real (post-decorative) level
 
 // Separate, much smaller alphabet for the file CONTENT itself - lowercase-only letters (no
 // uppercase at all - closer to Borges' own story, and it also shortens the arrow-folder path
@@ -105,11 +109,10 @@ DECORATIVE_LEVELS.forEach((level, d) => {
 });
 
 const caracterRadix = BigInt(CARACTER_COUNT);
-const caracterWidth = digitWidth(CARACTER_COUNT);
 while (index) {
   index--;
   const handle = index % caracterRadix;
-  path = path + "\\" + padNumber(Number(handle) + 1, caracterWidth); // "/" for Mac
+  path = path + "\\" + " " + ARROW_GLYPHS[Number(handle)]; // "/" for Mac
   index /= caracterRadix;
 }
 
