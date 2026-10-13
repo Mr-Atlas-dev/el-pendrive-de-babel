@@ -58,7 +58,13 @@
     box-shadow:0 30px 70px rgba(30,18,5,.35), 0 0 0 8px rgba(255,250,235,.25) inset;
     z-index:2;
     display:flex;
+    flex-direction:column;
     overflow:hidden;
+  }
+  .top{
+    flex:1;
+    min-height:0;
+    display:flex;
   }
 
   .corner-tl,.corner-br,.corner-bl,.corner-dr{position:absolute; width:30px; height:30px; border:2px solid var(--gold); opacity:.8; z-index:3;}
@@ -126,10 +132,12 @@
     min-width:0;
     display:flex;
     flex-direction:column;
-    justify-content:center;
+    justify-content:safe center; /* "safe": if it overflows, scroll from the top instead of clipping it */
     gap:clamp(6px, 1.1vh, 14px);
     padding:clamp(20px, 3.2vh, 38px) clamp(18px, 2.6vw, 40px) clamp(18px, 3vh, 34px);
-    overflow:hidden;
+    overflow-x:hidden;
+    overflow-y:auto;
+    scrollbar-width:thin;
   }
 
   .eyebrow{
@@ -221,6 +229,53 @@
   button#gen:hover{ background:#7f2727; transform:translateY(-1px); box-shadow:0 10px 22px rgba(80,20,20,.4); }
   button#gen:active{ transform:translateY(0); }
 
+  /* Destination "coordinates": the six decorative levels, in big numerals, like a library
+     call number to walk to before following the arrows */
+  .coords{
+    margin-top:clamp(6px, 1.2vh, 14px);
+  }
+  .coords-title{
+    text-align:center;
+    font-style:italic;
+    color:var(--ink-soft);
+    font-size:clamp(.88rem, 1.65vh, 1.04rem);
+    margin-bottom:clamp(4px, .8vh, 8px);
+  }
+  .coords-grid{
+    display:grid;
+    grid-template-columns:repeat(6, 1fr);
+    border-top:3px double rgba(169,121,44,.7);
+    border-bottom:3px double rgba(169,121,44,.7);
+    padding:clamp(4px, .8vh, 10px) 0;
+  }
+  .coord{
+    text-align:center;
+    padding:0 4px;
+    min-width:0;
+  }
+  .coord + .coord{ border-left:1px solid rgba(169,121,44,.4); }
+  .coord-num{
+    display:block;
+    font-family:"Playfair Display", Georgia, serif;
+    font-weight:900;
+    font-size:clamp(1.4rem, 4vh, 2.7rem);
+    line-height:1.05;
+    color:var(--maroon);
+    font-variant-numeric:lining-nums tabular-nums;
+  }
+  .coord-label{
+    display:block;
+    margin-top:2px;
+    font-size:clamp(.62rem, 1.2vh, .8rem);
+    letter-spacing:.14em;
+    text-transform:uppercase;
+    color:var(--gold);
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .coords.empty .coord-num{ opacity:.3; }
+
   .results{
     margin-top:clamp(6px, 1.2vh, 14px);
     display:grid;
@@ -236,16 +291,6 @@
     border:1px solid rgba(90,60,20,.3);
     border-radius:4px;
     padding:clamp(7px, 1.2vh, 13px) clamp(10px, 1.4vw, 14px);
-  }
-  .panel h3{
-    margin:0 0 clamp(4px, 1vh, 8px);
-    font-size:clamp(.9rem, 1.65vh, 1.1rem);
-    letter-spacing:.12em;
-    text-transform:uppercase;
-    color:var(--gold);
-    display:flex;
-    align-items:center;
-    gap:6px;
   }
   .path-box{
     font-family:"Courier New", monospace;
@@ -300,6 +345,16 @@
     gap:clamp(2px, .4vh, 5px);
   }
 
+  .note{
+    text-align:center;
+    font-style:italic;
+    color:var(--ink-soft);
+    font-size:clamp(.84rem, 1.55vh, 1rem);
+    line-height:1.4;
+    margin-top:clamp(4px, .9vh, 10px);
+  }
+  .note sup{ font-size:.7em; }
+
   footer{
     text-align:center;
     margin-top:clamp(3px, .8vh, 8px);
@@ -312,7 +367,10 @@
   @media (max-width:760px){
     html,body{ height:auto; overflow:auto; }
     body{ padding:20px 14px; }
-    .frame{ flex-direction:column; height:auto; max-height:none; }
+    .frame{ width:100%; height:auto; max-height:none; }
+    .top{ flex-direction:column; }
+    .coords-grid{ grid-template-columns:repeat(3, 1fr); row-gap:10px; }
+    .coord:nth-child(4){ border-left:none; }
     .image-col{ flex:0 0 220px; border-right:none; border-bottom:1px solid rgba(90,60,20,.3); }
     .image-col::after{ background:linear-gradient(0deg, rgba(236,223,192,.55), rgba(236,223,192,.12) 25%, transparent 45%); }
     .lang-toggle{ top:16px; }
@@ -325,6 +383,7 @@
     <span class="corner-tl"></span><span class="corner-br"></span><span class="corner-bl"></span><span class="corner-dr"></span>
     <button class="lang-toggle" id="langToggle" type="button">FR</button>
 
+    <div class="top">
     <div class="image-col">
       <img src="library.png" alt="Galerías hexagonales infinitas de la Biblioteca de Babel">
       <div class="image-caption" id="imgCaption">galería hexagonal, una entre infinitas</div>
@@ -342,11 +401,23 @@
 
       <div>
         <label for="input" id="t-label">Escribi una palabra, una frase, lo que quieras encontrar en la biblioteca:</label>
-        <textarea id="input" maxlength="3000" placeholder="por ejemplo: Esteban ama a Lea"></textarea>
+        <textarea id="input" maxlength="80" placeholder="por ejemplo: Esteban ama a Lea"></textarea>
         <div class="meta"><span id="count"></span><span id="t-hint"></span></div>
       </div>
 
       <button id="gen">Generar ruta</button>
+
+      <section class="coords empty" id="coords">
+        <div class="coords-title" id="t-coordsTitle">Tu destino en la biblioteca</div>
+        <div class="coords-grid">
+          <div class="coord"><span class="coord-num">&mdash;</span><span class="coord-label">Hexágono</span></div>
+          <div class="coord"><span class="coord-num">&mdash;</span><span class="coord-label">Pared</span></div>
+          <div class="coord"><span class="coord-num">&mdash;</span><span class="coord-label">Estante</span></div>
+          <div class="coord"><span class="coord-num">&mdash;</span><span class="coord-label">Libro</span></div>
+          <div class="coord"><span class="coord-num">&mdash;</span><span class="coord-label">Página</span></div>
+          <div class="coord"><span class="coord-num">&mdash;</span><span class="coord-label">Renglón</span></div>
+        </div>
+      </section>
 
       <div class="results">
         <div class="panel">
@@ -365,8 +436,12 @@
         </ol>
       </div>
 
+      <p class="note" id="t-note">Con solo 80 letras hay mas archivos posibles en este pendrive (unos 10<sup>118</sup>) que atomos en el universo observable.</p>
+
       <footer id="t-footer">Biblioteca de Babel &middot; Jorge Luis Borges, 1941 - reinterpretada en silicio por Julian Atlasovich 2026</footer>
     </div>
+    </div>
+
   </div>
 
 <script>
@@ -383,12 +458,12 @@
   // scheme using a BARE single-character name (plain digit or a lone arrow, no space/number)
   // corrupted content when navigating generated paths on real hardware; any 2+ character name
   // fixed it reliably - the leading space here is what keeps " ↑" from collapsing back to the
-  // single bare arrow character known to corrupt. 12 options (8 compass directions + 4 "turn the
-  // corner" arrows) cuts the folder levels a given message needs, since each level now carries
-  // slightly more information. This MUST stay in lockstep with the firmware
+  // single bare arrow character known to corrupt. 6 options: the six directions out of a hexagon
+  // toward its neighbors, clockwise from the top (measured fastest of 4/6/12 to load in Explorer).
+  // This MUST stay in lockstep with the firmware
   // (src/monolith/usb_mtp_impl.c.h) and file-to-path.js.
   var DECORATIVE_LEVELS = [
-    { name: "Hexagono", count: 47 },
+    { name: "Hexagono", count: 6 },
     { name: "Pared",    count: 4 },
     { name: "Estante",  count: 5 },
     { name: "Libro",    count: 32 },
@@ -396,18 +471,18 @@
     { name: "Renglon",  count: 40 }
   ];
   // Order here MUST exactly match babel_arrow_glyphs in src/monolith/usb_mtp_impl.c.h.
-  var ARROW_GLYPHS = ["↑", "↓", "←", "→", "↖", "↗", "↙", "↘", "⤴", "⤵", "⤶", "⤷"];
+  var ARROW_GLYPHS = ["↑", "↗", "↘", "↓", "↙", "↖"];
   var CARACTER_COUNT = ARROW_GLYPHS.length; // how many folders per real (post-decorative) level
 
   // Separate, much smaller alphabet for the file CONTENT itself - lowercase-only letters (no
   // uppercase), space, and minimal punctuation (just "." and ","). No digits and no accented
-  // letters - closer to Borges' own story (the library's language uses a fixed, minimal set of
+  // letters, except "ñ" - closer to Borges' own story (the library's language uses a fixed, minimal set of
   // "orthographic symbols": 22 letters, space, comma, period), and it shortens the folder-path
   // needed per character, since a smaller alphabet means fewer bits to encode per character.
   // Characters outside this set are simply dropped. MUST stay in lockstep with file-to-path.js
   // and the firmware's babel_content_alphabet (src/monolith/usb_mtp_impl.c.h).
   var CONTENT_ALPHABET = [" ",
-    "a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z",
+    "a","b","c","d","e","f","g","h","i","j","k","l","m","n","ñ","o","p","q","r","s","t","u","v","w","x","y","z",
     ".",","];
   var CONTENT_INDEX = {};
   CONTENT_ALPHABET.forEach(function(ch, i){ CONTENT_INDEX[ch] = i; });
@@ -415,11 +490,23 @@
   // Uppercase is folded to lowercase (not dropped) so no letters of the message are lost - the
   // user just never sees a capital letter in the textarea, since sanitizeInputLive re-sanitizes
   // on every keystroke and writes the result straight back into the field.
+  //
+  // Accented letters (Spanish á é í ó ú ü, French à â ç è ê ë î ï ô ù û ÿ ...) are replaced by
+  // the same letter without the accent, so the message keeps every letter. "ñ" is part of the
+  // alphabet itself, so it is kept as is. French ligatures have no accent-free single letter and
+  // are spelled out. Anything else not in the alphabet is dropped.
+  var LIGATURES = { "œ": "oe", "æ": "ae" };
   function sanitizeContentText(text){
+    text = text.normalize("NFC"); // a decomposed "n" + combining tilde becomes "ñ"
     var out = "";
     for (var i = 0; i < text.length; i++){
       var ch = text[i].toLowerCase();
-      if (CONTENT_INDEX.hasOwnProperty(ch)) out += ch;
+      if (!CONTENT_INDEX.hasOwnProperty(ch)){
+        ch = LIGATURES[ch] || ch.normalize("NFD").replace(/[̀-ͯ]/g, "");
+      }
+      for (var j = 0; j < ch.length; j++){
+        if (CONTENT_INDEX.hasOwnProperty(ch[j])) out += ch[j];
+      }
     }
     return out;
   }
@@ -454,7 +541,8 @@
   // Path is built root-to-leaf (appended, not prepended): the fixed decorative intro first,
   // then one uniform-radix digit per subsequent folder, in the order the firmware naturally
   // visits folders in (needing nothing but "how deep am I" to know whether it's still in the
-  // decorative intro or into the real numbered levels).
+  // decorative intro or into the real numbered levels). Also returns the decorative picks (as
+  // they appear in the folder names) and the arrow count, for the destination display.
   function textToPath(text, separator){
     var sanitized = sanitizeContentText(text);
     var index = 0n;
@@ -464,19 +552,24 @@
       index += (BigInt(charIndex) + 1n) * (contentRadix ** i);
     }
     var path = "";
+    var picks = [];
     for (var d = 0; d < DECORATIVE_LEVELS.length; d++){
       var level = DECORATIVE_LEVELS[d];
       var pick = decorativePick(sanitized, d, level.count); // cosmetic only, any value works
-      path = path + separator + level.name + "-" + padNumber(pick, digitWidth(level.count));
+      var padded = padNumber(pick, digitWidth(level.count));
+      picks.push(padded);
+      path = path + separator + level.name + "-" + padded;
     }
+    var steps = 0;
     var caracterRadix = BigInt(CARACTER_COUNT);
     while (index > 0n){
       index -= 1n;
       var handle = index % caracterRadix;
       path = path + separator + " " + ARROW_GLYPHS[Number(handle)];
       index /= caracterRadix;
+      steps++;
     }
-    return path;
+    return { path: path, picks: picks, steps: steps };
   }
 
   var i18n = {
@@ -486,13 +579,18 @@
       dedicationHtml: "Para <b>Esteban y Lea</b> &mdash; en algun anaquel de esta biblioteca infinita, entre libros de puro ruido, ya estaba escrita tambien su historia.",
       label: "Escribi una palabra, una frase, lo que quieras encontrar en la biblioteca:",
       placeholder: "por ejemplo: Esteban ama a Lea",
-      limitReached: "limite de {n} caracteres alcanzado",
-      hint: "Letras (sin acentos ni ñ), espacios y puntuacion basica (. ,).",
+      limitReached: "{n} letras: un renglon completo, como en el libro",
+      hint: "Letras, espacio, punto (.) y coma (,).",
       genBtn: "Generar ruta",
       emptyPath: "Escribi algo y presiona \"Generar ruta\"",
       copyBtn: "Copiar",
       copiedBtn: "¡Copiado!",
+      coordsTitle: "Tu destino en la biblioteca",
+      levelLabels: ["Hexágono", "Pared", "Estante", "Libro", "Página", "Renglón"],
       instructionsHtml: "<span class=\"how-label\">Como usarlo</span><ol><li>Conecta el pendrive.</li><li>En el explorador de Windows, hace click en la barra de direcciones y pega la ruta de arriba completa, despues presiona Enter.</li><li>Vas a llegar directo a un archivo de texto llamado <b>file.txt</b>.</li><li>Copialo a otra carpeta de tu computadora antes de abrirlo.</li></ol>",
+      // Every text of 1 to 80 characters over the 30-symbol alphabet is its own file.txt:
+      // 30 + 30^2 + ... + 30^80 ~ 10^118, vs ~10^80 atoms in the observable universe
+      noteHtml: "Con solo 80 letras hay mas archivos posibles en este pendrive (unos 10<sup>118</sup>) que atomos en el universo observable.",
       footer: "Biblioteca de Babel · Jorge Luis Borges, 1941 - reinterpretada en silicio por Julian Atlasovich 2026",
       caption: "galeria hexagonal, una entre infinitas",
       toggleLabel: "FR",
@@ -505,13 +603,16 @@
       dedicationHtml: "Pour <b>Esteban et Lea</b> &mdash; quelque part sur une étagère de cette bibliothèque infinie, parmi des livres de pur bruit, leur histoire était déjà écrite.",
       label: "Écrivez un mot, une phrase, ce que vous voulez retrouver dans la bibliothèque :",
       placeholder: "par exemple : Esteban aime Lea",
-      limitReached: "limite de {n} caractères atteinte",
-      hint: "Lettres (sans accents), espaces et une ponctuation simple (. ,).",
+      limitReached: "{n} lettres : une ligne complète, comme dans le livre",
+      hint: "Lettres, espace, point (.) et virgule (,).",
       genBtn: "Générer le chemin",
       emptyPath: "Écrivez quelque chose et appuyez sur « Générer le chemin »",
       copyBtn: "Copier",
       copiedBtn: "Copié !",
+      coordsTitle: "Votre destination dans la bibliothèque",
+      levelLabels: ["Hexagone", "Mur", "Étagère", "Livre", "Page", "Ligne"],
       instructionsHtml: "<span class=\"how-label\">Comment l'utiliser</span><ol><li>Branchez la clé USB.</li><li>Dans l'explorateur Windows, cliquez sur la barre d'adresse et collez le chemin ci-dessus en entier, puis appuyez sur Entrée.</li><li>Vous arriverez directement sur un fichier texte nommé <b>file.txt</b>.</li><li>Copiez-le dans un autre dossier de votre ordinateur avant de l'ouvrir.</li></ol>",
+      noteHtml: "Avec seulement 80 lettres, il y a plus de fichiers possibles sur cette clé (environ 10<sup>118</sup>) que d'atomes dans l'univers observable.",
       footer: "La Bibliothèque de Babel · Jorge Luis Borges, 1941 - réinterprétée en silicium par Julian Atlasovich 2026",
       caption: "galerie hexagonale, une parmi l'infini",
       toggleLabel: "ES",
@@ -521,7 +622,7 @@
   };
 
   var currentLang = "es";
-  var lastWin = null;
+  var lastResult = null; // { path, picks, steps } from textToPath, or null before generating
 
   var els = {
     eyebrow: document.getElementById("t-eyebrow"),
@@ -530,22 +631,34 @@
     label: document.getElementById("t-label"),
     hint: document.getElementById("t-hint"),
     instructions: document.getElementById("t-instructions"),
+    note: document.getElementById("t-note"),
     footer: document.getElementById("t-footer"),
     caption: document.getElementById("imgCaption"),
     toggle: document.getElementById("langToggle"),
     input: document.getElementById("input"),
     count: document.getElementById("count"),
     winPath: document.getElementById("winPath"),
-    gen: document.getElementById("gen")
+    gen: document.getElementById("gen"),
+    coords: document.getElementById("coords"),
+    coordsTitle: document.getElementById("t-coordsTitle"),
+    coordNums: document.querySelectorAll("#coords .coord-num"),
+    coordLabels: document.querySelectorAll("#coords .coord-label")
   };
 
   function renderPaths(){
     var t = i18n[currentLang];
-    if (lastWin === null){
+    els.coordsTitle.textContent = t.coordsTitle;
+    for (var i = 0; i < els.coordNums.length; i++){
+      els.coordLabels[i].textContent = t.levelLabels[i];
+      els.coordNums[i].textContent = lastResult ? lastResult.picks[i] : "—";
+    }
+    if (lastResult === null){
+      els.coords.classList.add("empty");
       els.winPath.textContent = t.emptyPath;
       els.winPath.classList.add("empty");
     } else {
-      els.winPath.textContent = "This PC\\USB of Babel\\disk" + lastWin;
+      els.coords.classList.remove("empty");
+      els.winPath.textContent = "This PC\\Pendrive of Babel\\disk" + lastResult.path;
       els.winPath.classList.remove("empty");
     }
   }
@@ -573,6 +686,7 @@
     els.hint.textContent = t.hint;
     els.gen.textContent = t.genBtn;
     els.instructions.innerHTML = t.instructionsHtml;
+    els.note.innerHTML = t.noteHtml;
     els.footer.textContent = t.footer;
     els.caption.textContent = t.caption;
     els.toggle.textContent = t.toggleLabel;
@@ -604,9 +718,9 @@
   function generate(){
     var sanitized = sanitizeContentText(els.input.value);
     if (!sanitized){
-      lastWin = null;
+      lastResult = null;
     } else {
-      lastWin = textToPath(els.input.value, "\\");
+      lastResult = textToPath(els.input.value, "\\");
     }
     renderPaths();
   }

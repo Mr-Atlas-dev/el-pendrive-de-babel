@@ -8,15 +8,15 @@ const Bun = require("bun");
 // file.txt. A random one is picked each time purely so it feels like wandering into a genuine,
 // differently-numbered corner of the library. The actual message is encoded entirely in the
 // folders AFTER that decorative intro, which are all UNIFORM: a leading space plus a direction or
-// turn arrow (e.g. " ↑"), no number at all, repeating as many times as needed. History: an
+// six hexagon-neighbor arrows (e.g. " ↑"), no number at all, repeating as many times as needed. History: an
 // unpadded 8-radix scheme using a BARE single-character name (plain digit or a lone arrow, no
 // space/number) corrupted content when navigating generated paths on real hardware; any 2+
 // character name fixed it reliably - the leading space here is what keeps " ↑" from collapsing
-// back to the single bare arrow character known to corrupt. 12 options (8 compass directions + 4
-// "turn the corner" arrows) cuts the folder levels a given message needs. MUST stay in lockstep
+// back to the single bare arrow character known to corrupt. 6 options: the six directions out of a
+// hexagon toward its neighbors, clockwise from the top (measured fastest of 4/6/12). MUST stay in lockstep
 // with docs/index.html and the firmware's babel_arrow_glyphs (src/monolith/usb_mtp_impl.c.h).
 const DECORATIVE_LEVELS = [
-  { name: "Hexagono", count: 47 },
+  { name: "Hexagono", count: 6 },
   { name: "Pared",    count: 4 },
   { name: "Estante",  count: 5 },
   { name: "Libro",    count: 32 },
@@ -24,18 +24,18 @@ const DECORATIVE_LEVELS = [
   { name: "Renglon",  count: 40 }
 ];
 // Order here MUST exactly match babel_arrow_glyphs in src/monolith/usb_mtp_impl.c.h.
-const ARROW_GLYPHS = ["↑", "↓", "←", "→", "↖", "↗", "↙", "↘", "⤴", "⤵", "⤶", "⤷"];
+const ARROW_GLYPHS = ["↑", "↗", "↘", "↓", "↙", "↖"];
 const CARACTER_COUNT = ARROW_GLYPHS.length; // how many folders per real (post-decorative) level
 
 // Separate, much smaller alphabet for the file CONTENT itself - lowercase-only letters (no
 // uppercase), space, and minimal punctuation (just "." and ","). No digits and no accented
-// letters - closer to Borges' own story (the library's language uses a fixed, minimal set of
+// letters, except "ñ" - closer to Borges' own story (the library's language uses a fixed, minimal set of
 // "orthographic symbols": 22 letters, space, comma, period), and it shortens the folder-path
 // needed per character, since a smaller alphabet means fewer bits to encode per character.
 // Characters outside this set are simply dropped. MUST stay in lockstep with docs/index.html and
 // the firmware's babel_content_alphabet (src/monolith/usb_mtp_impl.c.h).
 const CONTENT_ALPHABET = [" ",
-  "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z",
+  "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "ñ", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z",
   ".", ","];
 const CONTENT_INDEX = {};
 CONTENT_ALPHABET.forEach((ch, i) => { CONTENT_INDEX[ch] = i; });
@@ -44,7 +44,7 @@ CONTENT_ALPHABET.forEach((ch, i) => { CONTENT_INDEX[ch] = i; });
 // textarea, so no letters of the message are lost.
 function sanitizeContentText(text) {
   let out = "";
-  for (const rawCh of text) {
+  for (const rawCh of text.normalize("NFC")) { // NFC: a decomposed "n" + combining tilde becomes "ñ"
     const ch = rawCh.toLowerCase();
     if (CONTENT_INDEX.hasOwnProperty(ch)) out += ch;
   }

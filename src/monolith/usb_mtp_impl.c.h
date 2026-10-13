@@ -48,9 +48,9 @@
 
 //------------- device info -------------//
 #define DEV_INFO_MANUFACTURER   "p2r3"
-#define DEV_INFO_MODEL          "USB of Babel"
+#define DEV_INFO_MODEL          "Pendrive of Babel"
 #define DEV_INFO_VERSION        "1.0"
-#define DEV_PROP_FRIENDLY_NAME  "USB of Babel"
+#define DEV_PROP_FRIENDLY_NAME  "Pendrive of Babel"
 
 //------------- storage info -------------//
 #define STORAGE_DESCRIPTION { 'd', 'i', 's', 'k', 0 }
@@ -591,8 +591,9 @@ static int32_t fs_get_device_info(tud_mtp_cb_data_t* cb_data) {
 
 // Mirrors Jorge Luis Borges' "La biblioteca de Babel" as NARRATIVE FLAVOR: the first six levels
 // you walk through are always named Hexagono, Pared, Estante, Libro, Pagina, Renglon, in that
-// order, with Borges' own counts at each (47 hexagons, 4 walls, 5 shelves, 32 books, 410 pages,
-// 40 lines) - but they don't encode anything. babel_compute_index_for skips depths below
+// order, with these counts (6 hexagons - trimmed from Borges' 47 to keep the root listing
+// short - then Borges' own 4 walls, 5 shelves, 32 books, 410 pages, 40 lines) - but they don't
+// encode anything. babel_compute_index_for skips depths below
 // BABEL_DECORATIVE_DEPTH entirely when accumulating the content index, so ANY combination of
 // choices through these six levels leads to the exact same file.txt underneath - they're purely
 // corridors to wander, giving the "infinite library" feel without any of them being load-bearing
@@ -609,34 +610,37 @@ static const char* babel_decorative_names[BABEL_DECORATIVE_DEPTH] = {
   "Hexagono", "Pared", "Estante", "Libro", "Pagina", "Renglon"
 };
 static const uint32_t babel_decorative_counts[BABEL_DECORATIVE_DEPTH] = {
-  47, 4, 5, 32, 410, 40
+  6, 4, 5, 32, 410, 40
 };
-// Real (post-decorative) levels are named " ↑".." ⤷" - a leading space PLUS a direction/turn
-// arrow, no number at all, giving a pure maze-navigation theme (8 compass directions, plus 4
-// "turn the corner" arrows - see babel_arrow_glyphs below). History: an UNPADDED 8-radix scheme
+// Real (post-decorative) levels are named " ↑", " ↗" ... - a leading space PLUS an arrow, no
+// number at all: the six directions out of a hexagon toward its neighbors, as if choosing the
+// next gallery of the library to walk into (see babel_arrow_glyphs below). History: an UNPADDED 8-radix scheme
 // using a BARE SINGLE-CHARACTER name (either a plain digit "1".."8" or a single compass arrow
 // alone) corrupted content when navigating generated paths on real hardware. Any 2+ character
 // name (a zero-padded 2-digit number alone, or a leading space/number before the arrow) fixed it
 // reliably - the leading space here is what keeps " ↑" from collapsing back to the single bare
-// arrow character known to corrupt. 12 options (up from 8) also cuts the number of folder levels
-// a given message needs, since each level now carries slightly more information. MUST stay in
-// lockstep with docs/index.html and file-to-path.js.
-#define BABEL_CARACTER_COUNT    12
+// arrow character known to corrupt. 6 options was measured fastest end to end (a 35-character
+// message pasted into Explorer: 12 options ~7.2 s, 6 options ~3.3 s, 4 options ~5.7 s) - fewer
+// entries per folder make each level cheaper, but too many extra levels cost more, since
+// Explorer's own per-level overhead grows with depth. MUST stay in lockstep with docs/index.html
+// and file-to-path.js.
+#define BABEL_CARACTER_COUNT    6
 
 // Separate, much smaller alphabet for the DECODED FILE CONTENT (what ends up inside file.txt) -
 // lowercase-only letters (no uppercase), space, and minimal punctuation (just "." and ","). No
-// digits and no accented letters - closer to Borges' own story (the library's language uses a
-// fixed, minimal set of "orthographic symbols": 22 letters, space, comma, period), and it
+// digits and no accented letters, except "ñ" (2 bytes in UTF-8) - closer to Borges' own story
+// (the library's language uses a fixed, minimal set of "orthographic symbols": 22 letters,
+// space, comma, period), and it
 // shortens the folder-path needed per character, since a smaller alphabet means fewer bits to
 // encode per character (fewer levels needed for the same message). Any uppercase typed by the
 // user is folded to lowercase before encoding (see sanitizeContentText in docs/index.html /
 // file-to-path.js) rather than dropped. Any accented letter or digit typed is simply dropped
 // (also in sanitizeContentText). MUST stay in lockstep with docs/index.html and file-to-path.js.
-#define BABEL_CONTENT_ALPHABET_LENGTH 29
+#define BABEL_CONTENT_ALPHABET_LENGTH 30
 const char* babel_content_alphabet[BABEL_CONTENT_ALPHABET_LENGTH] = {
   " ",
   "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m",
-  "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z",
+  "n", "\xC3\xB1" /* ñ in UTF-8 */, "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z",
   ".", ","
 };
 
@@ -703,23 +707,16 @@ static int babel_write_prefixed_number(const char* prefix, uint32_t number, int 
   return n;
 }
 
-// 8 compass directions plus 4 "turn the corner" arrows, each a single UTF-16 code unit (all
-// within the BMP, well below the surrogate-pair range) - appended after a leading space, e.g.
-// " ↑" or " ⤷". Order here MUST exactly match the ARROW_GLYPHS array in docs/index.html and
-// file-to-path.js.
+// The six neighbors of a (flat-topped) hexagon, clockwise from the top, each a single UTF-16
+// code unit within the BMP - appended after a leading space, e.g. " ↑". Order here MUST exactly
+// match the ARROW_GLYPHS array in docs/index.html and file-to-path.js.
 static const uint16_t babel_arrow_glyphs[BABEL_CARACTER_COUNT] = {
   0x2191, // ↑ up
-  0x2193, // ↓ down
-  0x2190, // ← left
-  0x2192, // → right
-  0x2196, // ↖ up-left
   0x2197, // ↗ up-right
-  0x2199, // ↙ down-left
   0x2198, // ↘ down-right
-  0x2934, // ⤴ turn: right then curve up
-  0x2935, // ⤵ turn: right then curve down
-  0x2936, // ⤶ turn: down then curve left
-  0x2937  // ⤷ turn: down then curve right
+  0x2193, // ↓ down
+  0x2199, // ↙ down-left
+  0x2196  // ↖ up-left
 };
 
 // Writes the display name for local_index (0-based, < babel_branch_at(depth)) into
@@ -731,6 +728,8 @@ static int babel_name_at(uint32_t depth, uint32_t local_index) {
     snprintf(prefix, sizeof(prefix), "%s-", babel_decorative_names[depth]);
     return babel_write_prefixed_number(prefix, local_index + 1, width);
   }
+  // The leading space is required: a bare single-character name (re-tested 2026-10-13 with the
+  // persistent handle table) still breaks pasted paths in Windows Explorer.
   babel_name_buf[0] = (uint16_t)' ';
   babel_name_buf[1] = babel_arrow_glyphs[local_index];
   babel_name_buf[2] = 0;
@@ -1064,11 +1063,16 @@ static bool babel_compute_index_for(uint32_t parent_handle) {
 // (every character 2 bytes) for the website's maximum input length, so this should never
 // actually trigger - but if some future change ever grew either limit without the other keeping
 // pace, silently stopping early beats corrupting adjacent memory.
+//
+// The file starts with the UTF-8 byte order mark so any Windows editor, old or new, reads "ñ"
+// as UTF-8 instead of guessing a legacy codepage (which would show it as "Ã±").
 uint8_t babel_decode_scratch[4096];
 static void babel_decode_output_to_file(void) {
   size_t len = output_file_len;
   memcpy(babel_decode_scratch, output_file, len);
-  decoded_file_len = 0;
+  static const uint8_t utf8_bom[3] = { 0xEF, 0xBB, 0xBF };
+  memcpy(decoded_file, utf8_bom, sizeof(utf8_bom));
+  decoded_file_len = sizeof(utf8_bom);
   while (len > 0) {
     babel_buf_dec_standard(babel_decode_scratch, &len);
     uint32_t digit = babel_buf_divmod_scalar(babel_decode_scratch, &len, BABEL_CONTENT_ALPHABET_LENGTH);
