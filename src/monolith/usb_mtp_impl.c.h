@@ -601,8 +601,8 @@ static int32_t fs_get_device_info(tud_mtp_cb_data_t* cb_data) {
 // isn't offered until the real, numbered levels begin.
 //
 // The actual message is encoded entirely in the folders AFTER that decorative intro, which are
-// all UNIFORM: a leading space plus a direction arrow (e.g. " ↑", see babel_arrow_glyphs below),
-// repeating as many times as needed. This MUST stay in lockstep with docs/index.html and
+// all UNIFORM: a leading space plus a direction or turn arrow (e.g. " ↑", see babel_arrow_glyphs
+// below), repeating as many times as needed. This MUST stay in lockstep with docs/index.html and
 // file-to-path.js.
 #define BABEL_DECORATIVE_DEPTH 6
 static const char* babel_decorative_names[BABEL_DECORATIVE_DEPTH] = {
@@ -611,45 +611,33 @@ static const char* babel_decorative_names[BABEL_DECORATIVE_DEPTH] = {
 static const uint32_t babel_decorative_counts[BABEL_DECORATIVE_DEPTH] = {
   47, 4, 5, 32, 410, 40
 };
-// Real (post-decorative) levels are named " ↑".." ↘" - a leading space PLUS a compass arrow, no
-// number at all, giving a pure maze/direction theme. History: an UNPADDED 8-radix scheme using a
-// BARE SINGLE-CHARACTER name (either a plain digit "1".."8" or a single compass arrow alone)
-// corrupted content when navigating generated paths on real hardware, as did a 16-radix
-// single-arrow-character scheme and a 20-radix bare-arrow scheme was never tried. Any 2+ character
-// name (a zero-padded 2-digit number alone, or a number+space+arrow) fixed it reliably - this
-// confirms the leading space is pulling its weight here: without it, " ↑" would collapse back to
-// the single bare arrow character that's known to corrupt. MUST stay in lockstep with
-// docs/index.html and file-to-path.js.
-#define BABEL_CARACTER_COUNT    8
+// Real (post-decorative) levels are named " ↑".." ⤷" - a leading space PLUS a direction/turn
+// arrow, no number at all, giving a pure maze-navigation theme (8 compass directions, plus 4
+// "turn the corner" arrows - see babel_arrow_glyphs below). History: an UNPADDED 8-radix scheme
+// using a BARE SINGLE-CHARACTER name (either a plain digit "1".."8" or a single compass arrow
+// alone) corrupted content when navigating generated paths on real hardware. Any 2+ character
+// name (a zero-padded 2-digit number alone, or a leading space/number before the arrow) fixed it
+// reliably - the leading space here is what keeps " ↑" from collapsing back to the single bare
+// arrow character known to corrupt. 12 options (up from 8) also cuts the number of folder levels
+// a given message needs, since each level now carries slightly more information. MUST stay in
+// lockstep with docs/index.html and file-to-path.js.
+#define BABEL_CARACTER_COUNT    12
 
 // Separate, much smaller alphabet for the DECODED FILE CONTENT (what ends up inside file.txt) -
-// lowercase-only letters (no uppercase at all - closer to Borges' own story, where the library's
-// language uses a fixed, small set of "orthographic symbols", and incidentally also shortens the
-// arrow-folder path needed per character, since fewer symbols means a smaller radix to encode
-// against), digits, space, minimal punctuation (just "." and ",", same reasoning), and the
-// accented Spanish/French letters needed to write real words in either language without folding
-// them away. Any uppercase typed by the user is folded to lowercase before encoding (see
-// sanitizeContentText in docs/index.html / file-to-path.js) rather than dropped, so no letters of
-// the message are lost. Each entry is a UTF-8 byte STRING (not a single `char`) because accented
-// letters need 2 bytes in UTF-8, unlike plain ASCII which needs 1 - babel_decode_output_to_file
-// below copies however many bytes each entry actually has, rather than assuming exactly 1 per
-// digit. Written as explicit "\xC3\x89"-style byte escapes (not literal UTF-8 characters in the
-// source) so this doesn't depend on the compiler correctly guessing the source file's encoding.
-// MUST stay in lockstep with docs/index.html and file-to-path.js.
-#define BABEL_CONTENT_ALPHABET_LENGTH 63
+// lowercase-only letters (no uppercase), space, and minimal punctuation (just "." and ","). No
+// digits and no accented letters - closer to Borges' own story (the library's language uses a
+// fixed, minimal set of "orthographic symbols": 22 letters, space, comma, period), and it
+// shortens the folder-path needed per character, since a smaller alphabet means fewer bits to
+// encode per character (fewer levels needed for the same message). Any uppercase typed by the
+// user is folded to lowercase before encoding (see sanitizeContentText in docs/index.html /
+// file-to-path.js) rather than dropped. Any accented letter or digit typed is simply dropped
+// (also in sanitizeContentText). MUST stay in lockstep with docs/index.html and file-to-path.js.
+#define BABEL_CONTENT_ALPHABET_LENGTH 29
 const char* babel_content_alphabet[BABEL_CONTENT_ALPHABET_LENGTH] = {
   " ",
   "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m",
   "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z",
-  "0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
-  ".", ",",
-  // Lowercase accented: a a a a a | e e e e | i i i i | o o o o o | u u u u | n c
-  "\xC3\xA1", "\xC3\xA0", "\xC3\xA2", "\xC3\xA4", "\xC3\xA3", // á à â ä ã
-  "\xC3\xA9", "\xC3\xA8", "\xC3\xAA", "\xC3\xAB",             // é è ê ë
-  "\xC3\xAD", "\xC3\xAC", "\xC3\xAE", "\xC3\xAF",             // í ì î ï
-  "\xC3\xB3", "\xC3\xB2", "\xC3\xB4", "\xC3\xB6", "\xC3\xB5", // ó ò ô ö õ
-  "\xC3\xBA", "\xC3\xB9", "\xC3\xBB", "\xC3\xBC",             // ú ù û ü
-  "\xC3\xB1", "\xC3\xA7"                                      // ñ ç
+  ".", ","
 };
 
 // Returns the branch count (number of subdirectories, NOT counting the trailing "file.txt"
@@ -715,9 +703,9 @@ static int babel_write_prefixed_number(const char* prefix, uint32_t number, int 
   return n;
 }
 
-// One compass direction per real-level option, each a single UTF-16 code unit (within the BMP
-// "Arrows" block, well below the surrogate-pair range) - appended after a leading space, e.g.
-// " ↑". Order here MUST exactly match the ARROW_GLYPHS array in docs/index.html and
+// 8 compass directions plus 4 "turn the corner" arrows, each a single UTF-16 code unit (all
+// within the BMP, well below the surrogate-pair range) - appended after a leading space, e.g.
+// " ↑" or " ⤷". Order here MUST exactly match the ARROW_GLYPHS array in docs/index.html and
 // file-to-path.js.
 static const uint16_t babel_arrow_glyphs[BABEL_CARACTER_COUNT] = {
   0x2191, // ↑ up
@@ -727,7 +715,11 @@ static const uint16_t babel_arrow_glyphs[BABEL_CARACTER_COUNT] = {
   0x2196, // ↖ up-left
   0x2197, // ↗ up-right
   0x2199, // ↙ down-left
-  0x2198  // ↘ down-right
+  0x2198, // ↘ down-right
+  0x2934, // ⤴ turn: right then curve up
+  0x2935, // ⤵ turn: right then curve down
+  0x2936, // ⤶ turn: down then curve left
+  0x2937  // ⤷ turn: down then curve right
 };
 
 // Writes the display name for local_index (0-based, < babel_branch_at(depth)) into

@@ -378,13 +378,15 @@
   // file.txt. A deterministic (not random) one is picked each time purely so it feels like
   // wandering into a genuine, differently-numbered corner of the library rather than always the
   // literal same "Hexagono-1". The actual message is encoded entirely in the folders AFTER that
-  // decorative intro, which are all UNIFORM: a leading space plus a direction arrow (e.g. " ↑"),
-  // no number at all, repeating as many times as needed. History: an unpadded 8-radix scheme
-  // using a BARE single-character name (plain digit or a lone arrow, no space/number) corrupted
-  // content when navigating generated paths on real hardware; any 2+ character name (a zero-padded
-  // number alone, or a number+space+arrow) fixed it reliably - the leading space here is what
-  // keeps " ↑" from collapsing back to the single bare arrow character known to corrupt. This
-  // MUST stay in lockstep with the firmware (src/monolith/usb_mtp_impl.c.h) and file-to-path.js.
+  // decorative intro, which are all UNIFORM: a leading space plus a direction or turn arrow (e.g.
+  // " ↑"), no number at all, repeating as many times as needed. History: an unpadded 8-radix
+  // scheme using a BARE single-character name (plain digit or a lone arrow, no space/number)
+  // corrupted content when navigating generated paths on real hardware; any 2+ character name
+  // fixed it reliably - the leading space here is what keeps " ↑" from collapsing back to the
+  // single bare arrow character known to corrupt. 12 options (8 compass directions + 4 "turn the
+  // corner" arrows) cuts the folder levels a given message needs, since each level now carries
+  // slightly more information. This MUST stay in lockstep with the firmware
+  // (src/monolith/usb_mtp_impl.c.h) and file-to-path.js.
   var DECORATIVE_LEVELS = [
     { name: "Hexagono", count: 47 },
     { name: "Pared",    count: 4 },
@@ -394,23 +396,19 @@
     { name: "Renglon",  count: 40 }
   ];
   // Order here MUST exactly match babel_arrow_glyphs in src/monolith/usb_mtp_impl.c.h.
-  var ARROW_GLYPHS = ["↑", "↓", "←", "→", "↖", "↗", "↙", "↘"];
+  var ARROW_GLYPHS = ["↑", "↓", "←", "→", "↖", "↗", "↙", "↘", "⤴", "⤵", "⤶", "⤷"];
   var CARACTER_COUNT = ARROW_GLYPHS.length; // how many folders per real (post-decorative) level
 
   // Separate, much smaller alphabet for the file CONTENT itself - lowercase-only letters (no
-  // uppercase at all - closer to Borges' own story, and it also shortens the arrow-folder path
-  // needed per character, since a smaller alphabet means a smaller radix to encode against),
-  // digits, space, minimal punctuation (just "." and ",", same reasoning), and the accented
-  // Spanish/French letters needed to write real words in either language. This keeps paths
-  // meaningfully shorter per character than encoding raw UTF-8 bytes would, at the cost of only
-  // supporting plain text (characters outside this set are simply dropped). MUST stay in
-  // lockstep with file-to-path.js and the firmware's babel_content_alphabet
-  // (src/monolith/usb_mtp_impl.c.h).
+  // uppercase), space, and minimal punctuation (just "." and ","). No digits and no accented
+  // letters - closer to Borges' own story (the library's language uses a fixed, minimal set of
+  // "orthographic symbols": 22 letters, space, comma, period), and it shortens the folder-path
+  // needed per character, since a smaller alphabet means fewer bits to encode per character.
+  // Characters outside this set are simply dropped. MUST stay in lockstep with file-to-path.js
+  // and the firmware's babel_content_alphabet (src/monolith/usb_mtp_impl.c.h).
   var CONTENT_ALPHABET = [" ",
     "a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z",
-    "0","1","2","3","4","5","6","7","8","9",
-    ".",",",
-    "á","à","â","ä","ã","é","è","ê","ë","í","ì","î","ï","ó","ò","ô","ö","õ","ú","ù","û","ü","ñ","ç"];
+    ".",","];
   var CONTENT_INDEX = {};
   CONTENT_ALPHABET.forEach(function(ch, i){ CONTENT_INDEX[ch] = i; });
 
@@ -489,7 +487,7 @@
       label: "Escribi una palabra, una frase, lo que quieras encontrar en la biblioteca:",
       placeholder: "por ejemplo: Esteban ama a Lea",
       limitReached: "limite de {n} caracteres alcanzado",
-      hint: "Letras (con acentos y ñ), numeros, espacios y puntuacion basica (. ,).",
+      hint: "Letras (sin acentos ni ñ), espacios y puntuacion basica (. ,).",
       genBtn: "Generar ruta",
       emptyPath: "Escribi algo y presiona \"Generar ruta\"",
       copyBtn: "Copiar",
@@ -508,7 +506,7 @@
       label: "Écrivez un mot, une phrase, ce que vous voulez retrouver dans la bibliothèque :",
       placeholder: "par exemple : Esteban aime Lea",
       limitReached: "limite de {n} caractères atteinte",
-      hint: "Lettres (avec accents), chiffres, espaces et une ponctuation simple (. ,).",
+      hint: "Lettres (sans accents), espaces et une ponctuation simple (. ,).",
       genBtn: "Générer le chemin",
       emptyPath: "Écrivez quelque chose et appuyez sur « Générer le chemin »",
       copyBtn: "Copier",

@@ -7,14 +7,14 @@ const Bun = require("bun");
 // reconstructing the message), so ANY number at each of those levels leads to the exact same
 // file.txt. A random one is picked each time purely so it feels like wandering into a genuine,
 // differently-numbered corner of the library. The actual message is encoded entirely in the
-// folders AFTER that decorative intro, which are all UNIFORM: a leading space plus a direction
-// arrow (e.g. " ↑"), no number at all, repeating as many times as needed. History: an unpadded
-// 8-radix scheme using a BARE single-character name (plain digit or a lone arrow, no space/number)
-// corrupted content when navigating generated paths on real hardware; any 2+ character name (a
-// zero-padded number alone, or a number+space+arrow) fixed it reliably - the leading space here is
-// what keeps " ↑" from collapsing back to the single bare arrow character known to corrupt. MUST
-// stay in lockstep with docs/index.html and the firmware's babel_arrow_glyphs
-// (src/monolith/usb_mtp_impl.c.h).
+// folders AFTER that decorative intro, which are all UNIFORM: a leading space plus a direction or
+// turn arrow (e.g. " ↑"), no number at all, repeating as many times as needed. History: an
+// unpadded 8-radix scheme using a BARE single-character name (plain digit or a lone arrow, no
+// space/number) corrupted content when navigating generated paths on real hardware; any 2+
+// character name fixed it reliably - the leading space here is what keeps " ↑" from collapsing
+// back to the single bare arrow character known to corrupt. 12 options (8 compass directions + 4
+// "turn the corner" arrows) cuts the folder levels a given message needs. MUST stay in lockstep
+// with docs/index.html and the firmware's babel_arrow_glyphs (src/monolith/usb_mtp_impl.c.h).
 const DECORATIVE_LEVELS = [
   { name: "Hexagono", count: 47 },
   { name: "Pared",    count: 4 },
@@ -24,22 +24,19 @@ const DECORATIVE_LEVELS = [
   { name: "Renglon",  count: 40 }
 ];
 // Order here MUST exactly match babel_arrow_glyphs in src/monolith/usb_mtp_impl.c.h.
-const ARROW_GLYPHS = ["↑", "↓", "←", "→", "↖", "↗", "↙", "↘"];
+const ARROW_GLYPHS = ["↑", "↓", "←", "→", "↖", "↗", "↙", "↘", "⤴", "⤵", "⤶", "⤷"];
 const CARACTER_COUNT = ARROW_GLYPHS.length; // how many folders per real (post-decorative) level
 
 // Separate, much smaller alphabet for the file CONTENT itself - lowercase-only letters (no
-// uppercase at all - closer to Borges' own story, and it also shortens the arrow-folder path
-// needed per character, since a smaller alphabet means a smaller radix to encode against),
-// digits, space, minimal punctuation (just "." and ",", same reasoning), and the accented
-// Spanish/French letters needed to write real words in either language. Keeps paths meaningfully
-// shorter per character than encoding raw UTF-8 bytes would, at the cost of only supporting plain
-// text (characters outside this set are simply dropped). MUST stay in lockstep with
-// docs/index.html and the firmware's babel_content_alphabet (src/monolith/usb_mtp_impl.c.h).
+// uppercase), space, and minimal punctuation (just "." and ","). No digits and no accented
+// letters - closer to Borges' own story (the library's language uses a fixed, minimal set of
+// "orthographic symbols": 22 letters, space, comma, period), and it shortens the folder-path
+// needed per character, since a smaller alphabet means fewer bits to encode per character.
+// Characters outside this set are simply dropped. MUST stay in lockstep with docs/index.html and
+// the firmware's babel_content_alphabet (src/monolith/usb_mtp_impl.c.h).
 const CONTENT_ALPHABET = [" ",
   "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z",
-  "0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
-  ".", ",",
-  "á", "à", "â", "ä", "ã", "é", "è", "ê", "ë", "í", "ì", "î", "ï", "ó", "ò", "ô", "ö", "õ", "ú", "ù", "û", "ü", "ñ", "ç"];
+  ".", ","];
 const CONTENT_INDEX = {};
 CONTENT_ALPHABET.forEach((ch, i) => { CONTENT_INDEX[ch] = i; });
 
